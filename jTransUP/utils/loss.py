@@ -12,6 +12,6 @@ def normLoss(embeddings, dim=1):
 	norm = torch.sum(embeddings ** 2, dim=dim, keepdim=True)
 	return torch.sum(torch.max(norm - 1.0, autograd.Variable(torch.FloatTensor([0.0]))))
 
-def bprLoss(pos, neg):
-	loss = - F.logsigmoid(neg - pos)
+def bprLoss(pos, neg, target=1.0):
+	loss = - F.logsigmoid(target * ( pos - neg ))
 	return loss.mean()

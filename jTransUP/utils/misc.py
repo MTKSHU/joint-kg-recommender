@@ -39,13 +39,14 @@ class Accumulator(object):
     def get_avg(self, key, clear=True):
         return np.array(self.get(key, clear)).mean()
 
-class MyProcessTransUP(multiprocessing.Process):
-    def __init__(self, pred_dict, lock, topn=10, queue=None):
-        super(MyProcessTransUP, self).__init__()
+class MyTopNRecEvalProcess(multiprocessing.Process):
+    def __init__(self, pred_dict, lock, topn=10, target=1, queue=None):
+        super(MyTopNRecEvalProcess, self).__init__()
         self.queue = queue
         self.pred_dict = pred_dict
         self.topn = topn
         self.lock = lock
+        self.rank_f = heapq.nlargest if target == 1 else heapq.nsmallest
 
     def run(self):
         while True:
@@ -62,7 +63,7 @@ class MyProcessTransUP(multiprocessing.Process):
         grouped = [(u_id, list(g)) for u_id, g in groupby(test_list, key=lambda x:x[0])]
         ranked_list = []
         for u_id, subList in grouped:
-            ranked_sublist = heapq.nsmallest(self.topn, subList, key=lambda x:x[2])
+            ranked_sublist = self.rank_f(self.topn, subList, key=lambda x:x[2])
             ranked_list.append((u_id, ranked_sublist))
         
         self.lock.acquire()
@@ -71,7 +72,7 @@ class MyProcessTransUP(multiprocessing.Process):
                 self.pred_dict[u_list[0]] = u_list[1]
             elif u_list[0] in self.pred_dict :
                 new_list = self.pred_dict[u_list[0]] + u_list[1]
-                ranked_newlist = heapq.nsmallest(self.topn, new_list, key=lambda x:x[2])
+                ranked_newlist = self.rank_f(self.topn, new_list, key=lambda x:x[2])
                 self.pred_dict[u_list[0]] = ranked_newlist
         self.lock.release()
 

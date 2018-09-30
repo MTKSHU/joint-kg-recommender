@@ -16,7 +16,7 @@ from torch.autograd import Variable as V
 from jTransUP.models.base import get_flags, flag_defaults, load_data
 from jTransUP.models.base import init_model
 from jTransUP.utils.trainer import ModelTrainer
-from jTransUP.utils.misc import Accumulator, getPerformance, MyProcessTransUP
+from jTransUP.utils.misc import Accumulator, getPerformance, MyTopNRecEvalProcess
 from jTransUP.utils.misc import to_gpu
 from jTransUP.utils.loss import bprLoss, orthogonalLoss, normLoss
 from jTransUP.utils.visuliazer import Visualizer
@@ -33,6 +33,8 @@ def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDi
     # key is u_id, value is a sorted list of size FLAGS.topn
     pred_dict = {}
 
+    model_target = 1 if FLAGS.model_type == "bprmf" else -1
+
     model.eval()
 
     with multiprocessing.Manager() as manager:
@@ -42,7 +44,7 @@ def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDi
         queue = multiprocessing.JoinableQueue()
         workerList = []
         for i in range(num_processes):
-            worker = MyProcessTransUP(d, lock, topn=FLAGS.topn, queue=queue)
+            worker = MyTopNRecEvalProcess(d, lock, topn=FLAGS.topn, target=model_target, queue=queue)
             workerList.append(worker)
             worker.daemon = True
             worker.start()
@@ -88,28 +90,26 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
 
         # set model in training mode
         model.train()
-
-        start = time.time()
+        
         rating_batch = next(train_iter)
         u, pi, ni = rating_batch
+
+        model_target = 1 if FLAGS.model_type == "bprmf" else -1
 
         trainer.optimizer_zero_grad()
 
         # Run model. output: batch_size * cand_num
         pos_score = model(u, pi)
         neg_score = model(u, ni)
-        
-        size = pos_score.size()
-        
-        losses = orthogonalLoss(model.pref_weight, model.norm_weight)
 
         # Calculate loss.
         if FLAGS.loss_type == "margin":
-            target = -1.0 * to_gpu(V(torch.ones(size)))
-            losses += nn.MarginRankingLoss(margin=FLAGS.margin).forward(pos_score, neg_score, target)
+            losses = nn.MarginRankingLoss(margin=FLAGS.margin).forward(pos_score, neg_score, model_target)
         elif FLAGS.loss_type == "bpr":
-            losses += bprLoss(pos_score, neg_score)
-
+            losses = bprLoss(pos_score, neg_score, target=model_target)
+        
+        if FLAGS.model_type == "transup":
+            losses += orthogonalLoss(model.pref_weight, model.norm_weight)
         # Backward pass.
         losses.backward()
         # Hard Gradient Clipping
@@ -133,12 +133,12 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
 
             # Calculate loss.
             if FLAGS.loss_type == "margin":
-                target = -1.0 * to_gpu(V(torch.ones(size)))
-                dev_losses = nn.MarginRankingLoss(margin=FLAGS.margin).forward(dev_pos_score, dev_neg_score, target)
+                dev_losses = nn.MarginRankingLoss(margin=FLAGS.margin).forward(dev_pos_score, dev_neg_score, model_target)
             elif FLAGS.loss_type == "bpr":
-                dev_losses = bprLoss(dev_pos_score, dev_neg_score)
+                dev_losses = bprLoss(dev_pos_score, dev_neg_score, target=model_target)
 
-            dev_losses += orthogonalLoss(model.pref_weight, model.norm_weight)
+            if FLAGS.model_type == "transup":
+                dev_losses += orthogonalLoss(model.pref_weight, model.norm_weight)
 
             test_performance = evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDict, logger, num_processes=num_processes, show_sample=show_sample)
 

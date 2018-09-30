@@ -7,6 +7,7 @@ from functools import reduce
 from jTransUP.data import load_rating_data
 from jTransUP.utils.data import MakeTrainIterator, MakeEvalIterator
 import jTransUP.models.transUP as transup
+import jTransUP.models.bprmf as bprmf
 
 def get_data_manager(dataset):
     # Select data format.
@@ -34,7 +35,7 @@ def load_data(FLAGS, logger):
     return train_iter, eval_iter, valid_iter, user_total, item_total, trainTotal, testTotal, validTotal, testDict, validDict
 
 def get_flags():
-    gflags.DEFINE_enum("model_type", "transup", ["transup"], "")
+    gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf"], "")
     gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "")
     gflags.DEFINE_float("learning_rate", 0.05, "Used in optimizer.")
     gflags.DEFINE_integer(
@@ -122,6 +123,8 @@ def init_model(
     logger.info("Building model.")
     if FLAGS.model_type == "transup":
         build_model = transup.build_model
+    elif FLAGS.model_type == "bprmf":
+        build_model = bprmf.build_model
     else:
         raise NotImplementedError
 

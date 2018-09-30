@@ -1,4 +1,4 @@
-'''
+
 from SPARQLWrapper import SPARQLWrapper, N3
 from rdflib import Graph
 
@@ -16,4 +16,3 @@ results = sparql.query().convert()
 g = Graph()
 g.parse(data=results, format="n3")
 print(g.serialize(format='n3'))
-'''
