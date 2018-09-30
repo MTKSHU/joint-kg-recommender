@@ -4,6 +4,7 @@ import sys
 import os
 import json
 from tqdm import tqdm
+tqdm.monitor_iterval=0
 import math
 import multiprocessing
 import time
@@ -99,21 +100,15 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
         neg_score = model(u, ni)
         
         size = pos_score.size()
-        target = to_gpu(V(torch.ones(size)))
+        
+        losses = orthogonalLoss(model.pref_weight, model.norm_weight)
 
         # Calculate loss.
         if FLAGS.loss_type == "margin":
-            losses = nn.MarginRankingLoss(margin=FLAGS.margin).forward(pos_score, neg_score, target)
+            target = -1.0 * to_gpu(V(torch.ones(size)))
+            losses += nn.MarginRankingLoss(margin=FLAGS.margin).forward(pos_score, neg_score, target)
         elif FLAGS.loss_type == "bpr":
-            losses = bprLoss(pos_score, neg_score)
-
-        losses += orthogonalLoss(model.pref_weight, model.norm_weight)
-
-        user_embeddings = model.user_embeddings(to_gpu(V(torch.LongTensor(u))))
-        item_embeddings = model.item_embeddings(to_gpu(V(torch.LongTensor(pi+ni))))
-
-        # todo: norm pre_weight and norm_weight?
-        losses = losses + normLoss(user_embeddings) + normLoss(item_embeddings)
+            losses += bprLoss(pos_score, neg_score)
 
         # Backward pass.
         losses.backward()
@@ -135,22 +130,15 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
             # Run model. output: batch_size * cand_num
             dev_pos_score = model(dev_u, dev_pi)
             dev_neg_score = model(dev_u, dev_ni)
-            
-            target = to_gpu(V(torch.ones(size)))
 
             # Calculate loss.
             if FLAGS.loss_type == "margin":
+                target = -1.0 * to_gpu(V(torch.ones(size)))
                 dev_losses = nn.MarginRankingLoss(margin=FLAGS.margin).forward(dev_pos_score, dev_neg_score, target)
             elif FLAGS.loss_type == "bpr":
                 dev_losses = bprLoss(dev_pos_score, dev_neg_score)
 
             dev_losses += orthogonalLoss(model.pref_weight, model.norm_weight)
-
-            user_embeddings = model.user_embeddings(to_gpu(V(torch.LongTensor(dev_u))))
-            item_embeddings = model.item_embeddings(to_gpu(V(torch.LongTensor(dev_pi + dev_ni))))
-
-            # todo: norm pre_weight and norm_weight?
-            dev_losses = dev_losses + normLoss(user_embeddings) + normLoss(item_embeddings)
 
             test_performance = evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDict, logger, num_processes=num_processes, show_sample=show_sample)
 
@@ -161,15 +149,13 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
             pbar.set_description("Training")
             # visuliazation
             if vis is not None:
-                vis.plot_many_stack({
-                    'train_loss': total_loss,
-                    'valid_loss':dev_losses.data[0],
-                    'f1':test_performance[0],
-                    'hit':test_performance[1],
-                    'ndcg':test_performance[2],
-                    'prec':test_performance[3],
-                    'rec':test_performance[4]
-                    })
+                vis.plot_many_stack({'train_loss': total_loss, 'valid_loss':dev_losses.data[0],},
+                win_name="Loss Curve")
+                vis.plot_many_stack({'f1':test_performance[0]}, win_name="F1 Score@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'hit':test_performance[1]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'ndcg':test_performance[2]}, win_name="NDCG@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'precision':test_performance[3]}, win_name="Precision@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'recall':test_performance[4]}, win_name="Recall@{}".format(FLAGS.topn))
 
 def run(only_forward=False):
     # set visualization

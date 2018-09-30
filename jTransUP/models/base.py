@@ -39,7 +39,7 @@ def get_flags():
     gflags.DEFINE_float("learning_rate", 0.05, "Used in optimizer.")
     gflags.DEFINE_integer(
         "early_stopping_steps_to_wait",
-        6000,
+        140000,
         "How many times will lr decrease? If set to 0, it remains constant.")
     gflags.DEFINE_bool(
         "L1_flag",
@@ -54,13 +54,13 @@ def get_flags():
 
     gflags.DEFINE_integer(
         "eval_interval_steps",
-        2000,
+        14000,
         "Evaluate at this interval in each epoch.")
     gflags.DEFINE_integer(
         "training_steps",
-        140000,
+        420000,
         "Stop training after this point.")
-    gflags.DEFINE_enum("loss_type", "margin", ["bpr", "margin"], "")
+    gflags.DEFINE_enum("loss_type", "bpr", ["bpr", "margin"], "")
     gflags.DEFINE_float("clipping_max_value", 5.0, "")
     gflags.DEFINE_float("margin", 1.0, "Used in margin loss.")
     gflags.DEFINE_float("momentum", 0.9, "The momentum of the optimizer.")
