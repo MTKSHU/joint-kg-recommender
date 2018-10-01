@@ -39,9 +39,9 @@ class Accumulator(object):
     def get_avg(self, key, clear=True):
         return np.array(self.get(key, clear)).mean()
 
-class MyTopNRecEvalProcess(multiprocessing.Process):
+class MyEvalProcess(multiprocessing.Process):
     def __init__(self, pred_dict, lock, topn=10, target=1, queue=None):
-        super(MyTopNRecEvalProcess, self).__init__()
+        super(MyEvalProcess, self).__init__()
         self.queue = queue
         self.pred_dict = pred_dict
         self.topn = topn
@@ -75,7 +75,7 @@ class MyTopNRecEvalProcess(multiprocessing.Process):
                 self.pred_dict[u_list[0]] = ranked_newlist
         self.lock.release()
 
-def getPerformance(predDict, testDict):
+def getPerformance(predDict, testDict, num_processes=multiprocessing.cpu_count()):
     pred_list = []
     gold_list = []
     
@@ -84,7 +84,7 @@ def getPerformance(predDict, testDict):
         pred_list.append([rating[1] for rating in predDict[u_id]])
         gold_list.append(list(testDict[u_id]))
     
-    f1, hit, ndcg, p, r = evalAll(pred_list, gold_list)
+    f1, hit, ndcg, p, r = evalAll(pred_list, gold_list, num_processes=num_processes)
     return f1, hit, ndcg, p, r
 
 def recursively_set_device(inp, gpu=USE_CUDA):

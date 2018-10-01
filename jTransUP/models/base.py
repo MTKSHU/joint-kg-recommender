@@ -23,21 +23,21 @@ def load_data(FLAGS, logger):
 
     trainDict, testDict, validDict, allRatingDict, user_total, item_total, trainTotal, testTotal, validTotal = data_manager.load_data(FLAGS.data_path+FLAGS.dataset, logger=logger)
 
-    train_iter = MakeTrainIterator(trainDict, FLAGS.batch_size, item_total, allRatingDict=allRatingDict)
+    train_iter = MakeTrainIterator(trainDict, item_total, FLAGS.batch_size,negtive_samples=FLAGS.negtive_samples, allRatingDict=allRatingDict)
 
     eval_iter = MakeEvalIterator(testDict, item_total, FLAGS.batch_size, allRatingDict=allRatingDict)
 
     if validDict is not None:
-        valid_iter = MakeTrainIterator(validDict, FLAGS.batch_size, item_total, allRatingDict=allRatingDict)
+        valid_iter = MakeEvalIterator(validDict, item_total, FLAGS.batch_size, allRatingDict=allRatingDict)
     else:
-        valid_iter = MakeTrainIterator(testDict, FLAGS.batch_size, item_total, allRatingDict=allRatingDict)
+        valid_iter = MakeEvalIterator(testDict, item_total, FLAGS.batch_size, allRatingDict=allRatingDict)
 
     return train_iter, eval_iter, valid_iter, user_total, item_total, trainTotal, testTotal, validTotal, testDict, validDict
 
 def get_flags():
     gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf"], "")
     gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "")
-    gflags.DEFINE_float("learning_rate", 0.05, "Used in optimizer.")
+    gflags.DEFINE_float("learning_rate", 0.001, "Used in optimizer.")
     gflags.DEFINE_integer(
         "early_stopping_steps_to_wait",
         140000,
@@ -48,8 +48,9 @@ def get_flags():
         "If set to True, use L1 distance as dissimilarity; else, use L2.")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
     gflags.DEFINE_integer("embedding_size", 64, ".")
+    gflags.DEFINE_integer("negtive_samples", 1, ".")
     gflags.DEFINE_integer("batch_size", 512, "Minibatch size.")
-    gflags.DEFINE_enum("optimizer_type", "Adam", ["Adam", "SGD"], "")
+    gflags.DEFINE_enum("optimizer_type", "SGD", ["Adam", "SGD", "Adagrad"], "")
     gflags.DEFINE_float("learning_rate_decay_when_no_progress", 0.5,
                         "Used in optimizer. Decay the LR by this much every epoch steps if a new best has not been set in the last epoch.")
 

@@ -16,7 +16,7 @@ from torch.autograd import Variable as V
 from jTransUP.models.base import get_flags, flag_defaults, load_data
 from jTransUP.models.base import init_model
 from jTransUP.utils.trainer import ModelTrainer
-from jTransUP.utils.misc import Accumulator, getPerformance, MyTopNRecEvalProcess
+from jTransUP.utils.misc import Accumulator, getPerformance, MyEvalProcess
 from jTransUP.utils.misc import to_gpu
 from jTransUP.utils.loss import bprLoss, orthogonalLoss, normLoss
 from jTransUP.utils.visuliazer import Visualizer
@@ -44,7 +44,7 @@ def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDi
         queue = multiprocessing.JoinableQueue()
         workerList = []
         for i in range(num_processes):
-            worker = MyTopNRecEvalProcess(d, lock, topn=FLAGS.topn, target=model_target, queue=queue)
+            worker = MyEvalProcess(d, lock, topn=FLAGS.topn, target=model_target, queue=queue)
             workerList.append(worker)
             worker.daemon = True
             worker.start()
@@ -63,8 +63,8 @@ def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDi
 
         for worker in workerList:
             worker.terminate()
-
-    f1, hit, ndcg, p, r = getPerformance(pred_dict, testDict)
+            
+    f1, p, r, hit, ndcg = getPerformance(pred_dict, testDict, num_processes=num_processes)
     pbar.close()
 
     logger.info("f1:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, p:{:.4f}, r:{:.4f}, topn:{}.".format(f1, hit, ndcg, p, r, FLAGS.topn))
@@ -78,24 +78,48 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
     logger.info("Training.")
 
     # New Training Loop
-    pbar = tqdm(total=FLAGS.eval_interval_steps)
-    pbar.set_description("Training")
-
+    pbar = None
+    total_loss = 0.0
     for _ in range(trainer.step, FLAGS.training_steps):
-        total_loss = 0.0
+        
+        model_target = 1 if FLAGS.model_type == "bprmf" else -1
+
         if FLAGS.early_stopping_steps_to_wait > 0 and (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
             logger.info('No improvement after ' +
                        str(FLAGS.early_stopping_steps_to_wait) +
                        ' steps. Stopping training.')
             break
+        
+        if trainer.step % FLAGS.eval_interval_steps == 0:
+            if pbar is not None:
+                pbar.close()
+                total_loss /= FLAGS.eval_interval_steps
+            
+            dev_performance = evaluate(FLAGS, model, user_total, item_total, eval_total, valid_iter, validDict, logger, num_processes=num_processes, show_sample=show_sample)
+
+            test_performance = evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDict, logger, num_processes=num_processes, show_sample=show_sample)
+
+            trainer.new_performance(dev_performance, test_performance)
+            logger.info("train loss:{:.4f}!".format(total_loss))
+
+            pbar = tqdm(total=FLAGS.eval_interval_steps)
+            pbar.set_description("Training")
+            # visuliazation
+            if vis is not None:
+                vis.plot_many_stack({'train_loss': total_loss},
+                win_name="Loss Curve")
+                vis.plot_many_stack({'valid_f1':dev_performance[0], 'test_f1':test_performance[0]}, win_name="F1 Score@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'valid_hit':dev_performance[1], 'test_hit':test_performance[1]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'valid_ndcg':dev_performance[2], 'test_ndcg':test_performance[2]}, win_name="NDCG@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'valid_precision':dev_performance[3], 'test_precision':test_performance[3]}, win_name="Precision@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'valid_recall':dev_performance[4], 'test_recall':test_performance[4]}, win_name="Recall@{}".format(FLAGS.topn))
+            total_loss = 0.0
 
         # set model in training mode
         model.train()
         
         rating_batch = next(train_iter)
         u, pi, ni = rating_batch
-
-        model_target = 1 if FLAGS.model_type == "bprmf" else -1
 
         trainer.optimizer_zero_grad()
 
@@ -121,42 +145,6 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
         total_loss += losses.data[0]
 
         pbar.update(1)
-
-        if trainer.step > 0 and trainer.step % FLAGS.eval_interval_steps == 0:
-            pbar.close()
-            # use valid loss to record best performance
-            dev_rating_batch = next(valid_iter)
-            dev_u, dev_pi, dev_ni = dev_rating_batch
-
-            # Run model. output: batch_size * cand_num
-            dev_pos_score = model(dev_u, dev_pi)
-            dev_neg_score = model(dev_u, dev_ni)
-
-            # Calculate loss.
-            if FLAGS.loss_type == "margin":
-                dev_losses = nn.MarginRankingLoss(margin=FLAGS.margin).forward(dev_pos_score, dev_neg_score, model_target)
-            elif FLAGS.loss_type == "bpr":
-                dev_losses = bprLoss(dev_pos_score, dev_neg_score, target=model_target)
-
-            if FLAGS.model_type == "transup":
-                dev_losses += orthogonalLoss(model.pref_weight, model.norm_weight)
-
-            test_performance = evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDict, logger, num_processes=num_processes, show_sample=show_sample)
-
-            trainer.new_performance(dev_losses.data[0], test_performance)
-            logger.info("train loss:{:.4f}, valid loss:{:.4f}!".format(total_loss, dev_losses.data[0]))
-
-            pbar = tqdm(total=FLAGS.eval_interval_steps)
-            pbar.set_description("Training")
-            # visuliazation
-            if vis is not None:
-                vis.plot_many_stack({'train_loss': total_loss, 'valid_loss':dev_losses.data[0],},
-                win_name="Loss Curve")
-                vis.plot_many_stack({'f1':test_performance[0]}, win_name="F1 Score@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'hit':test_performance[1]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'ndcg':test_performance[2]}, win_name="NDCG@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'precision':test_performance[3]}, win_name="Precision@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'recall':test_performance[4]}, win_name="Recall@{}".format(FLAGS.topn))
 
 def run(only_forward=False):
     # set visualization

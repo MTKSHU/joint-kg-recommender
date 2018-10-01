@@ -26,6 +26,7 @@ class ModelTrainer(object):
 
         self.l2_lambda = FLAGS.l2_lambda
         self.learning_rate_decay_when_no_progress = FLAGS.learning_rate_decay_when_no_progress
+        self.momentum = FLAGS.momentum
 
         self.training_data_length = None
         self.eval_interval_steps = FLAGS.eval_interval_steps
@@ -34,7 +35,8 @@ class ModelTrainer(object):
         self.best_step = 0
 
         # record best dev, test acc
-        self.min_dev_loss = 100000.0
+        self.best_dev_f1 = 0.0
+        self.best_dev_performance = 0.0, 0.0, 0.0, 0.0, 0.0
         self.best_test_performance = 0.0, 0.0, 0.0, 0.0, 0.0
 
         # GPU support.
@@ -49,8 +51,8 @@ class ModelTrainer(object):
             self.logger.info("Found best checkpoint, restoring.")
             self.load(self.checkpoint_path)
             self.logger.info(
-                "Resuming at step: {} with best performance: {}".format(
-                    self.best_step, self.best_test_performance))
+                "Resuming at step: {} with best dev performance: {} and test performance : {}.".format(
+                    self.best_step, self.best_dev_performance, self.best_test_performance))
 
     def reset(self):
         self.step = 0
@@ -64,6 +66,9 @@ class ModelTrainer(object):
                 weight_decay=self.l2_lambda)
         elif self.optimizer_type == "SGD":
             self.optimizer = optim.SGD(self.parameters, lr=learning_rate,
+                weight_decay=self.l2_lambda, momentum=self.momentum)
+        elif self.optimizer_type == "Adagrad":
+            self.optimizer = optim.Adagrad(self.parameters, lr=learning_rate,
                 weight_decay=self.l2_lambda)
 
     def optimizer_step(self):
@@ -73,17 +78,17 @@ class ModelTrainer(object):
     def optimizer_zero_grad(self):
         self.optimizer.zero_grad()
 
-    def new_performance(self, dev_loss, test_performance):
+    def new_performance(self, dev_performance, test_performance):
         # Track best dev error
-        f1, hit, ndcg, p, r = test_performance
-        if check_rho * dev_loss < self.min_dev_loss:
+        f1, hit, ndcg, p, r = dev_performance
+        if f1 > check_rho * self.best_dev_f1:
             self.best_step = self.step
-            self.logger.info(
-                    "Checkpointing with new best f1:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, p:{:.4f}, r{:.4f}!".format(f1, hit, ndcg, p, r))
+            self.logger.info( "Checkpointing ..." )
             self.save(self.checkpoint_path)
 
             self.best_test_performance = test_performance
-            self.min_dev_loss = dev_loss
+            self.best_dev_performance = dev_performance
+            self.best_dev_f1 = f1
 
         # Learning rate decay
         if self.learning_rate_decay_when_no_progress != 1.0:
@@ -105,7 +110,7 @@ class ModelTrainer(object):
         save_dict = {
             'step': self.step,
             'best_step': self.best_step,
-            'min_dev_loss': self.min_dev_loss,
+            'best_dev_f1': self.best_dev_f1,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict()
             }
@@ -128,4 +133,4 @@ class ModelTrainer(object):
 
         self.step = checkpoint['step']
         self.best_step = checkpoint['best_step']
-        self.min_dev_loss = checkpoint['min_dev_loss']
+        self.best_dev_f1 = checkpoint['best_dev_f1']

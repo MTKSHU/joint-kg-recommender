@@ -20,8 +20,9 @@ def addNegRatings(ratingList, itemTotal, ratingDict=None):
 
 def MakeTrainIterator(
         trainDict,
-        batch_size,
         item_total,
+        batch_size,
+        negtive_samples=1,
         allRatingDict=None):
     train_list = []
     for u_id in trainDict:
@@ -31,7 +32,7 @@ def MakeTrainIterator(
 
     def data_iter():
         dataset_size = len(train_list)
-        order = list(range(dataset_size))
+        order = list(range(dataset_size)) * negtive_samples
         random.shuffle(order)
         start = -1 * batch_size
 
