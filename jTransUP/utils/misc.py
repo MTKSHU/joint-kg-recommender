@@ -50,16 +50,15 @@ class MyTopNRecEvalProcess(multiprocessing.Process):
 
     def run(self):
         while True:
-            (u_ids, i_ids, scores) = self.queue.get()
+            ratings = self.queue.get()
             try:
-                self.process_data(u_ids, i_ids, scores)
+                self.process_data(list(ratings))
             except:
                 time.sleep(5)
-                self.process_data(u_ids, i_ids, scores)
+                self.process_data(list(ratings))
             self.queue.task_done()
 
-    def process_data(self, u_ids, i_ids, scores):
-        test_list = [(u_id, i_ids[j], scores[j]) for j, u_id in enumerate(u_ids)]
+    def process_data(self, test_list):
         grouped = [(u_id, list(g)) for u_id, g in groupby(test_list, key=lambda x:x[0])]
         ranked_list = []
         for u_id, subList in grouped:

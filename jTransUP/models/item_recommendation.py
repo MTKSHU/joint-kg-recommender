@@ -53,7 +53,8 @@ def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDi
             if rating_batch is None : break
             u_ids, i_ids = rating_batch
             score = model(u_ids, i_ids)
-            queue.put((u_ids, i_ids, score.data.cpu().numpy()))
+            pred_ratings = zip(u_ids, i_ids, score.data.cpu().numpy())
+            queue.put(pred_ratings)
             pbar.update(1)
 
         queue.join()
@@ -82,7 +83,7 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
 
     for _ in range(trainer.step, FLAGS.training_steps):
         total_loss = 0.0
-        if (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
+        if FLAGS.early_stopping_steps_to_wait > 0 and (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
             logger.info('No improvement after ' +
                        str(FLAGS.early_stopping_steps_to_wait) +
                        ' steps. Stopping training.')
