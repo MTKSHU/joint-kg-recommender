@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import csv
 
+
 def process(rating_file):
 
     df = pd.read_csv(rating_file)

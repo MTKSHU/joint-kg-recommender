@@ -24,10 +24,22 @@ class BPRMF(nn.Module):
         self.item_total = item_total
 
         # init user and item embeddings
-        self.user_embeddings = to_gpu(nn.Embedding(self.user_total, self.embedding_size))
-        self.item_embeddings = to_gpu(nn.Embedding(self.item_total, self.embedding_size))
-        self.user_embeddings.weight.requires_grad = True
-        self.item_embeddings.weight.requires_grad = True
+        user_weight = torch.FloatTensor(self.user_total, self.embedding_size)
+        item_weight = torch.FloatTensor(self.item_total, self.embedding_size)
+        nn.init.xavier_uniform(user_weight)
+        nn.init.xavier_uniform(item_weight)
+        # init user and item embeddings
+        self.user_embeddings = nn.Embedding(self.user_total, self.embedding_size)
+        self.item_embeddings = nn.Embedding(self.item_total, self.embedding_size)
+        self.user_embeddings.weight = nn.Parameter(user_weight)
+        self.item_embeddings.weight = nn.Parameter(item_weight)
+        normalize_user_emb = F.normalize(self.user_embeddings.weight.data, p=2, dim=1)
+        normalize_item_emb = F.normalize(self.item_embeddings.weight.data, p=2, dim=1)
+        self.user_embeddings.weight.data = normalize_user_emb
+        self.item_embeddings.weight.data = normalize_item_emb
+
+        self.user_embeddings = to_gpu(self.user_embeddings)
+        self.item_embeddings = to_gpu(self.item_embeddings)
 
 
     def forward(self, u_ids, i_ids):

@@ -1,3 +1,10 @@
+
+dataset=$1
+model_type=$2
+batch_size
+embedding_size
+l2_lambda
+learning_rate  batch_size topn num_preferences
 dataset=$1
 model_type=$2
 gpu_id=$3

@@ -75,7 +75,7 @@ def train_loop(FLAGS, model, trainer, train_iter, test_iter, valid_iter,
         if trainer.step % FLAGS.eval_interval_steps == 0:
             if pbar is not None:
                 pbar.close()
-                total_loss /= FLAGS.eval_interval_steps
+            total_loss /= FLAGS.eval_interval_steps
             logger.info("train loss:{:.4f}!".format(total_loss))
             
             if valid_total > 0:
@@ -89,13 +89,13 @@ def train_loop(FLAGS, model, trainer, train_iter, test_iter, valid_iter,
             pbar.set_description("Training")
             # visuliazation
             if vis is not None:
-                vis.plot_many_stack({'train_loss': total_loss},
+                vis.plot_many_stack({'Train Loss': total_loss},
                 win_name="Loss Curve")
-                vis.plot_many_stack({'valid_f1':dev_performance[0], 'test_f1':test_performance[0]}, win_name="F1 Score@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'valid_hit':dev_performance[1], 'test_hit':test_performance[1]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'valid_ndcg':dev_performance[2], 'test_ndcg':test_performance[2]}, win_name="NDCG@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'valid_precision':dev_performance[3], 'test_precision':test_performance[3]}, win_name="Precision@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'valid_recall':dev_performance[4], 'test_recall':test_performance[4]}, win_name="Recall@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'Valid F1':dev_performance[0], 'Test F1':test_performance[0]}, win_name="F1 Score@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'Valid Precision':dev_performance[1], 'Test Precision':test_performance[1]}, win_name="Precision@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'Valid Recall':dev_performance[2], 'Test Recall':test_performance[2]}, win_name="Recall@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'Valid Hit':dev_performance[3], 'Test Hit':test_performance[3]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
+                vis.plot_many_stack({'Valid NDCG':dev_performance[4], 'Test NDCG':test_performance[4]}, win_name="NDCG@{}".format(FLAGS.topn))
             total_loss = 0.0
 
         rating_batch = next(train_iter)
