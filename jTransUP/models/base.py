@@ -25,14 +25,13 @@ def load_data(FLAGS, logger):
 
     train_iter = MakeTrainIterator(trainDict, item_total, FLAGS.batch_size,negtive_samples=FLAGS.negtive_samples, allRatingDict=allRatingDict)
 
-    eval_iter = MakeEvalIterator(testDict, item_total, FLAGS.batch_size, allRatingDict=allRatingDict)
+    test_iter = MakeEvalIterator(testDict, item_total, FLAGS.batch_size, allRatingDict=allRatingDict)
 
+    valid_iter = None
     if validDict is not None:
         valid_iter = MakeEvalIterator(validDict, item_total, FLAGS.batch_size, allRatingDict=allRatingDict)
-    else:
-        valid_iter = MakeEvalIterator(testDict, item_total, FLAGS.batch_size, allRatingDict=allRatingDict)
 
-    return train_iter, eval_iter, valid_iter, user_total, item_total, trainTotal, testTotal, validTotal, testDict, validDict
+    return train_iter, test_iter, valid_iter, user_total, item_total, trainTotal, testTotal, validTotal, testDict, validDict
 
 def get_flags():
     gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf"], "")
@@ -50,7 +49,7 @@ def get_flags():
     gflags.DEFINE_integer("embedding_size", 64, ".")
     gflags.DEFINE_integer("negtive_samples", 1, ".")
     gflags.DEFINE_integer("batch_size", 512, "Minibatch size.")
-    gflags.DEFINE_enum("optimizer_type", "SGD", ["Adam", "SGD", "Adagrad"], "")
+    gflags.DEFINE_enum("optimizer_type", "SGD", ["Adam", "SGD", "Adagrad", "Rmsprop"], "")
     gflags.DEFINE_float("learning_rate_decay_when_no_progress", 0.5,
                         "Used in optimizer. Decay the LR by this much every epoch steps if a new best has not been set in the last epoch.")
 
@@ -67,9 +66,8 @@ def get_flags():
     gflags.DEFINE_float("margin", 1.0, "Used in margin loss.")
     gflags.DEFINE_float("momentum", 0.9, "The momentum of the optimizer.")
     gflags.DEFINE_integer("seed", 0, "Fix the random seed. Except for 0, which means no setting of random seed.")
-    gflags.DEFINE_integer("num_preferences", 4, "number of user preferences.")
     gflags.DEFINE_integer("topn", 10, "")
-    gflags.DEFINE_integer("num_processes", 4, "number of processes to evaluate")
+    gflags.DEFINE_integer("num_preferences", 4, "")
 
     gflags.DEFINE_string("experiment_name", None, "")
     gflags.DEFINE_string("data_path", None, "")

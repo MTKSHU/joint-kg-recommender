@@ -50,7 +50,7 @@ def MakeTrainIterator(
     return data_iter()
 
 def MakeEvalIterator(
-        testDict,
+        evalDict,
         itemTotal,
         batch_size,
         allRatingDict=None):
@@ -59,12 +59,12 @@ def MakeEvalIterator(
         u_list = []
         i_list = []
         while True:
-            for u in testDict:
+            for u in evalDict:
                 start = 0
                 filter_set = allRatingDict[u] if allRatingDict is not None and u in allRatingDict else set()
                 item_set = set(range(itemTotal)) - filter_set
 
-                item_list = list(item_set|testDict[u])
+                item_list = list(item_set|evalDict[u])
                 while True:
                     end = batch_size - len(i_list)
                     if start + end > len(item_list) :
@@ -77,6 +77,10 @@ def MakeEvalIterator(
                     yield u_list, i_list
                     del u_list[:]
                     del i_list[:]
+            if len(i_list) > 0 :
+                yield u_list, i_list
+                del u_list[:]
+                del i_list[:]
             yield None
 
     return data_iter()

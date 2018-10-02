@@ -6,8 +6,8 @@ import json
 from tqdm import tqdm
 tqdm.monitor_iterval=0
 import math
-import multiprocessing
 import time
+import random
 
 import torch
 import torch.nn as nn
@@ -16,14 +16,14 @@ from torch.autograd import Variable as V
 from jTransUP.models.base import get_flags, flag_defaults, load_data
 from jTransUP.models.base import init_model
 from jTransUP.utils.trainer import ModelTrainer
-from jTransUP.utils.misc import Accumulator, getPerformance, MyEvalProcess
+from jTransUP.utils.misc import Accumulator, getPerformance, evalProcess
 from jTransUP.utils.misc import to_gpu
 from jTransUP.utils.loss import bprLoss, orthogonalLoss, normLoss
 from jTransUP.utils.visuliazer import Visualizer
 
 FLAGS = gflags.FLAGS
 
-def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDict, logger, num_processes=multiprocessing.cpu_count(), show_sample=False):
+def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, evalDict, logger, show_sample=False):
     # Evaluate
     total_batches = math.ceil(float(eval_total) / FLAGS.batch_size)
     # processing bar
@@ -37,42 +37,24 @@ def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDi
 
     model.eval()
 
-    with multiprocessing.Manager() as manager:
-        d = manager.dict()
-
-        lock = multiprocessing.Lock()
-        queue = multiprocessing.JoinableQueue()
-        workerList = []
-        for i in range(num_processes):
-            worker = MyEvalProcess(d, lock, topn=FLAGS.topn, target=model_target, queue=queue)
-            workerList.append(worker)
-            worker.daemon = True
-            worker.start()
-
-        for rating_batch in eval_iter:
-            if rating_batch is None : break
-            u_ids, i_ids = rating_batch
-            score = model(u_ids, i_ids)
-            pred_ratings = zip(u_ids, i_ids, score.data.cpu().numpy())
-            queue.put(pred_ratings)
-            pbar.update(1)
-
-        queue.join()
-
-        pred_dict = dict(d)
-
-        for worker in workerList:
-            worker.terminate()
-            
-    f1, p, r, hit, ndcg = getPerformance(pred_dict, testDict, num_processes=num_processes)
+    pred_dict = {}
+    for rating_batch in eval_iter:
+        if rating_batch is None : break
+        u_ids, i_ids = rating_batch
+        score = model(u_ids, i_ids)
+        pred_ratings = zip(u_ids, i_ids, score.data.cpu().numpy())
+        pred_dict = evalProcess(list(pred_ratings), pred_dict, topn=FLAGS.topn, target=model_target)
+        pbar.update(1)
+        
+    f1, p, r, hit, ndcg = getPerformance(pred_dict, evalDict)
     pbar.close()
 
-    logger.info("f1:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, p:{:.4f}, r:{:.4f}, topn:{}.".format(f1, hit, ndcg, p, r, FLAGS.topn))
+    logger.info("f1:{:.4f}, p:{:.4f}, r:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, topn:{}.".format(f1, p, r, hit, ndcg, FLAGS.topn))
 
-    return f1, hit, ndcg, p, r
+    return f1, p, r, hit, ndcg
 
-def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
-            user_total, item_total, eval_total, validDict, testDict, logger, vis=None, num_processes=multiprocessing.cpu_count(), show_sample=False):
+def train_loop(FLAGS, model, trainer, train_iter, test_iter, valid_iter,
+            user_total, item_total, test_total, valid_total, validDict, testDict, logger, vis=None, show_sample=False):
 
     # Train.
     logger.info("Training.")
@@ -88,19 +70,20 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
             logger.info('No improvement after ' +
                        str(FLAGS.early_stopping_steps_to_wait) +
                        ' steps. Stopping training.')
+            if pbar is not None: pbar.close()
             break
-        
         if trainer.step % FLAGS.eval_interval_steps == 0:
             if pbar is not None:
                 pbar.close()
                 total_loss /= FLAGS.eval_interval_steps
-            
-            dev_performance = evaluate(FLAGS, model, user_total, item_total, eval_total, valid_iter, validDict, logger, num_processes=num_processes, show_sample=show_sample)
-
-            test_performance = evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, testDict, logger, num_processes=num_processes, show_sample=show_sample)
-
-            trainer.new_performance(dev_performance, test_performance)
             logger.info("train loss:{:.4f}!".format(total_loss))
+            
+            if valid_total > 0:
+                dev_performance = evaluate(FLAGS, model, user_total, item_total, valid_total, valid_iter, validDict, logger, show_sample=show_sample)
+            
+            test_performance = evaluate(FLAGS, model, user_total, item_total, test_total, test_iter, testDict, logger, show_sample=show_sample)
+            if valid_total == 0: dev_performance = test_performance
+            trainer.new_performance(dev_performance, test_performance)
 
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
@@ -115,11 +98,11 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
                 vis.plot_many_stack({'valid_recall':dev_performance[4], 'test_recall':test_performance[4]}, win_name="Recall@{}".format(FLAGS.topn))
             total_loss = 0.0
 
-        # set model in training mode
-        model.train()
-        
         rating_batch = next(train_iter)
         u, pi, ni = rating_batch
+
+        # set model in training mode
+        model.train()
 
         trainer.optimizer_zero_grad()
 
@@ -137,16 +120,22 @@ def train_loop(FLAGS, model, trainer, train_iter, eval_iter, valid_iter,
             losses += orthogonalLoss(model.pref_weight, model.norm_weight)
         # Backward pass.
         losses.backward()
+
+        # for param in model.parameters():
+        #     print(param.grad.data.sum())
+
         # Hard Gradient Clipping
-        nn.utils.clip_grad_norm([param for name, param in model.named_parameters() if name not in ["user_embeddings.weight", "item_embeddings.weight"]], FLAGS.clipping_max_value)
+        nn.utils.clip_grad_norm([param for name, param in model.named_parameters()], FLAGS.clipping_max_value)
 
         # Gradient descent step.
         trainer.optimizer_step()
         total_loss += losses.data[0]
-
         pbar.update(1)
 
 def run(only_forward=False):
+    if FLAGS.seed != 0:
+        random.seed(FLAGS.seed)
+
     # set visualization
     vis = None
     if FLAGS.has_visualization:
@@ -175,15 +164,15 @@ def run(only_forward=False):
     logger.info("Flag Values:\n" + json.dumps(FLAGS.FlagValuesDict(), indent=4, sort_keys=True))
 
     # load data
-    train_iter, eval_iter, valid_iter, user_total, item_total, trainTotal, testTotal, validTotal, testDict, validDict = load_data(FLAGS, logger)
+    
+    train_iter, test_iter, valid_iter, user_total, item_total, trainTotal, testTotal, validTotal, testDict, validDict = load_data(FLAGS, logger)
 
-    rating_total = trainTotal + testTotal + validTotal
-    eval_total = user_total*item_total - trainTotal - validTotal
+    test_total = user_total*item_total - trainTotal - validTotal
+    valid_total = 0 if valid_iter is None else user_total*item_total - trainTotal - testTotal
 
     model = init_model(FLAGS, user_total, item_total, logger)
     epoch_length = math.ceil( trainTotal / FLAGS.batch_size )
     trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
-
     # Do an evaluation-only run.
     if only_forward:
         evaluate(
@@ -191,11 +180,10 @@ def run(only_forward=False):
             model,
             user_total,
             item_total,
-            eval_total,
-            eval_iter,
+            test_total,
+            test_iter,
             testDict,
             logger,
-            num_processes=FLAGS.num_processes,
             show_sample=False)
     else:
         train_loop(
@@ -203,16 +191,16 @@ def run(only_forward=False):
             model,
             trainer,
             train_iter,
-            eval_iter,
+            test_iter,
             valid_iter,
             user_total,
             item_total,
-            eval_total,
+            test_total,
+            valid_total,
             validDict,
             testDict,
             logger,
             vis=vis,
-            num_processes=FLAGS.num_processes,
             show_sample=False)
     
 

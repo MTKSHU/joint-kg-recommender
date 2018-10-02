@@ -4,7 +4,7 @@ import math
 import random
 from copy import deepcopy
 
-def preprocessData(rating_file, train_ratio = 0.7, test_ratio = 0.1, is_shuffle=False):
+def preprocessData(rating_file, train_ratio = 0.7, test_ratio = 0.1, is_shuffle=False, is_filter=True):
     # valid ratio could be 1-train_ratio-test_ratio, and maybe zero
     user_dict, u_map_dict, i_map_dict = process(rating_file)
     
@@ -14,6 +14,7 @@ def preprocessData(rating_file, train_ratio = 0.7, test_ratio = 0.1, is_shuffle=
     valid_ratio = 1 - train_ratio - test_ratio
     assert valid_ratio >= 0 and valid_ratio < 1, "valid ratio out of range!"
 
+    train_item_set = set()
     for u_id in user_dict:
         tmp_item_list = user_dict[u_id]
 
@@ -23,10 +24,18 @@ def preprocessData(rating_file, train_ratio = 0.7, test_ratio = 0.1, is_shuffle=
 
         if is_shuffle : random.shuffle(tmp_item_list)
         tmp_train_list = [i for i in tmp_item_list[0:n_train]]
+        train_item_set.update(tmp_train_list)
         tmp_valid_list = [i for i in tmp_item_list[n_train:n_train+n_valid]]
         tmp_test_list = [i for i in tmp_item_list[n_train+n_valid:]]
 
         user_dict[u_id] = (tmp_train_list, tmp_valid_list, tmp_test_list)
+    
+    if is_filter:
+        for u_id in user_dict:
+            item_list = user_dict[u_id]
+            valid_list = [i_id for i_id in item_list[1] if i_id in train_item_set]
+            test_list = [i_id for i_id in item_list[2] if i_id in train_item_set]
+            user_dict[u_id] = (item_list[0], valid_list, test_list)
 
     return user_dict, u_map_dict, i_map_dict
 
@@ -48,7 +57,8 @@ def loadRatings(fileName):
 def load_data(data_path, logger=None):
     train_ratio = 0.7
     test_ratio = 0.2
-    isShuffle = False
+    isShuffle = True
+    is_filter = True
 
     train_file = os.path.join(data_path, "train.dat")
     test_file = os.path.join(data_path, "test.dat")
@@ -60,14 +70,15 @@ def load_data(data_path, logger=None):
     if not os.path.exists(train_file) or not os.path.exists(test_file) or \
     not os.path.exists(u_map_file) or not os.path.exists(i_map_file):
         rating_file = os.path.join(data_path, "ratings.csv")
-        assert os.path.exists(rating_file), "make sure {} and {} exists or {}!".format(train_file, test_file, rating_file)
+        assert os.path.exists(rating_file), "make sure {}, {}, {} and {} exists or {}!".format(train_file, test_file, u_map_file, i_map_file, rating_file)
 
         str_is_shuffle = "shuffle and split" if isShuffle else "split without shuffle"
-        logger.debug("{} {} for {:.1f} training, {:.1f} validation and {:.1f} testing!".format(
+        if logger is not None:
+            logger.debug("{} {} for {:.1f} training, {:.1f} validation and {:.1f} testing!".format(
             str_is_shuffle, rating_file, train_ratio, 1-train_ratio-test_ratio, test_ratio
         ))
 
-        user_dict, u_map_dict, i_map_dict = preprocessData(rating_file, train_ratio=train_ratio, test_ratio=test_ratio, is_shuffle=isShuffle)
+        user_dict, u_map_dict, i_map_dict = preprocessData(rating_file, train_ratio=train_ratio, test_ratio=test_ratio, is_shuffle=isShuffle, is_filter=is_filter)
 
         f_train = open(train_file, 'w')
         f_test = open(test_file, 'w')
@@ -98,10 +109,11 @@ def load_data(data_path, logger=None):
     
     validTotal = 0
     validDict = None
-    if valid_file is not None:
+    if valid_file is not None and os.path.exists(valid_file):
         validTotal, validDict = loadRatings(valid_file)
     
-    logger.info("Totally {} train, {} test and {} valid ratings!".format(trainTotal, testTotal, validTotal))
+    if logger is not None:
+        logger.info("Totally {} train, {} test and {} valid ratings!".format(trainTotal, testTotal, validTotal))
     
     # get item total
     item_total = 0
@@ -116,7 +128,8 @@ def load_data(data_path, logger=None):
             if len(line) > 0:
                 user_total += 1
     
-    logger.info("successfully load {} users and {} items!".format(user_total, item_total))
+    if logger is not None:
+        logger.info("successfully load {} users and {} items!".format(user_total, item_total))
     
     allRatingDict = deepcopy(trainDict)
     
@@ -135,4 +148,9 @@ def load_data(data_path, logger=None):
 
 if __name__ == "__main__":
     # Demo:
-    trainDict, testDict, validDict, negDict, item_total = load_data("./datasets/ml1m/")
+    trainDict, testDict, validDict, allRatingDict, user_total, item_total, trainTotal, testTotal, validTotal = load_data("/Users/caoyixin/Github/joint-kg-recommender/datasets/ml1m/")
+    print("user:{}, item:{}!".format(user_total, item_total))
+    print("totally ratings for {} train, {} valid, and {} test!".format(trainTotal, validTotal, testTotal))
+    import random
+    u_id = random.randrange(user_total)
+    print("u:{} has brought items for train {}, valid {} and test {}!".format(u_id, trainDict[u_id], validDict[u_id] if validDict is not None else [], testDict[u_id]))

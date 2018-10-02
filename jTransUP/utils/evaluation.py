@@ -3,29 +3,7 @@ from __future__ import division
 import numpy as np
 import math
 import pandas as pd
-import multiprocessing
 import time
-
-class MyTopNEvalProcess(multiprocessing.Process):
-    def __init__(self, L, queue=None):
-        super(MyTopNEvalProcess, self).__init__()
-        self.queue = queue
-        self.L = L
-
-    def run(self):
-        while True:
-            all_user_lists = self.queue.get()
-            try:
-                self.process_data(all_user_lists)
-            except:
-                time.sleep(5)
-                self.process_data(all_user_lists)
-            self.queue.task_done()
-
-    def process_data(self, all_user_lists):
-        for user_lists in all_user_lists:
-            f, p, r, hit_ratio, ndcg = get_performance(user_lists[0], user_lists[1])
-            self.L.append([f, p, r, hit_ratio, ndcg])
 
 def get_performance(recommend_list, purchased_list):
     """计算F1值。
@@ -131,7 +109,7 @@ def ndcg_at_k(r, k, method=0):
         return 0.
     return dcg_at_k(r, k, method) / dcg_max
 
-def evalAll(recommend_list, purchased_list, num_processes=multiprocessing.cpu_count()):
+def evalAll(recommend_list, purchased_list):
     """计算F1和NDCG值。
     输入：
         recommend_list： 推荐算法给出的推荐结果。
@@ -140,35 +118,13 @@ def evalAll(recommend_list, purchased_list, num_processes=multiprocessing.cpu_co
         F1，NDCG值。
     """
     assert len(recommend_list) == len(purchased_list), "Eval user number not match!"
-    user_num = len(recommend_list)
-    eval_list = []
-    user_per_process = math.ceil(float(user_num) / num_processes)
-    
-    for i in range(num_processes):
-        eval_list.append(zip(recommend_list[i*user_per_process:(i+1)*user_per_process], purchased_list[i*user_per_process:(i+1)*user_per_process]))
 
-    with multiprocessing.Manager() as manager:
-        L = manager.list()
-
-        queue = multiprocessing.JoinableQueue()
-        workerList = []
-        for _ in range(num_processes):
-            worker = MyTopNEvalProcess(L, queue=queue)
-            workerList.append(worker)
-            worker.daemon = True
-            worker.start()
-
-        for eval_batch in eval_list:
-            queue.put(eval_batch)
-
-        queue.join()
-
-        results = np.array(list(L))
-
-        for worker in workerList:
-            worker.terminate()
+    results = []
+    for list_pair in zip(recommend_list, purchased_list):
+        f, p, r, hit_ratio, ndcg = get_performance(list_pair[0], list_pair[1])
+        results.append([f, p, r, hit_ratio, ndcg])
     # f1, prec, rec, hit_ratio, ndcg
-    performance = results.mean(axis=0)
+    performance = np.array(results).mean(axis=0)
     return performance[0], performance[1], performance[2], performance[3], performance[4]
 
 if __name__ == "__main__":
@@ -176,5 +132,5 @@ if __name__ == "__main__":
     b = np.random.randint(0, 10, size=(2, 4))
     print(a)
     print(b)
-    f1, prec, rec, hit_ratio, ndcg = evalAll(a, b, num_processes=1)
+    f1, prec, rec, hit_ratio, ndcg = evalAll(a, b)
     print("{},{},{},{},{}".format(f1, prec, rec, hit_ratio, ndcg))

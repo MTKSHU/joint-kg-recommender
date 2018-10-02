@@ -27,8 +27,6 @@ class ModelTrainer(object):
         self.l2_lambda = FLAGS.l2_lambda
         self.learning_rate_decay_when_no_progress = FLAGS.learning_rate_decay_when_no_progress
         self.momentum = FLAGS.momentum
-
-        self.training_data_length = None
         self.eval_interval_steps = FLAGS.eval_interval_steps
 
         self.step = 0
@@ -70,6 +68,9 @@ class ModelTrainer(object):
         elif self.optimizer_type == "Adagrad":
             self.optimizer = optim.Adagrad(self.parameters, lr=learning_rate,
                 weight_decay=self.l2_lambda)
+        elif self.optimizer_type == "Rmsprop":
+            self.optimizer = optim.RMSprop(self.parameters, lr=learning_rate,
+                weight_decay=self.l2_lambda, momentum=self.momentum)
 
     def optimizer_step(self):
         self.optimizer.step()
@@ -80,7 +81,7 @@ class ModelTrainer(object):
 
     def new_performance(self, dev_performance, test_performance):
         # Track best dev error
-        f1, hit, ndcg, p, r = dev_performance
+        f1, _, _, _, _ = dev_performance
         if f1 > check_rho * self.best_dev_f1:
             self.best_step = self.step
             self.logger.info( "Checkpointing ..." )
