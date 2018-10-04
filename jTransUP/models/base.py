@@ -39,7 +39,7 @@ def get_flags():
     gflags.DEFINE_float("learning_rate", 0.001, "Used in optimizer.")
     gflags.DEFINE_integer(
         "early_stopping_steps_to_wait",
-        140000,
+        70000,
         "How many times will lr decrease? If set to 0, it remains constant.")
     gflags.DEFINE_bool(
         "L1_flag",
@@ -59,7 +59,7 @@ def get_flags():
         "Evaluate at this interval in each epoch.")
     gflags.DEFINE_integer(
         "training_steps",
-        420000,
+        1400000,
         "Stop training after this point.")
     gflags.DEFINE_enum("loss_type", "bpr", ["bpr", "margin"], "")
     gflags.DEFINE_float("clipping_max_value", 5.0, "")
@@ -80,7 +80,7 @@ def get_flags():
         "has_visualization",
         True,
         "if set True, use visdom for visualization.")
-
+    # todo: only eval when no train.dat when load data
     gflags.DEFINE_boolean(
         "eval_only_mode",
         False,

@@ -115,6 +115,7 @@ class ModelTrainer(object):
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict()
             }
+        torch.save(save_dict, filename)
 
         if USE_CUDA:
             recursively_set_device(self.model.state_dict(), gpu=USE_CUDA)

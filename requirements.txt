@@ -1,3 +1,4 @@
 conda install python-gflags
 pip install visdom
 data_path/datasets/rating.csv or train.dat + valid.dat + test.dat
+conda install -c conda-forge tqdm

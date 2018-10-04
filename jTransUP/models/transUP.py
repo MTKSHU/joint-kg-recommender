@@ -57,8 +57,8 @@ class TransUPModel(nn.Module):
 
         self.user_embeddings = to_gpu(self.user_embeddings)
         self.item_embeddings = to_gpu(self.item_embeddings)
-        self.pref_weight = to_gpu(self.pref_weight)
-        self.norm_weight = to_gpu(self.norm_weight)
+        self.pref_weight = self.pref_weight
+        self.norm_weight = self.norm_weight
 
     def forward(self, u_ids, i_ids):
         u_e = self.user_embeddings(to_gpu(V(torch.LongTensor(u_ids))))

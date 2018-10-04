@@ -6,6 +6,11 @@ class Visualizer(object):
     def __init__(self, env='default', **kwargs):
         self.vis = visdom.Visdom(env=env, **kwargs)
         self.index = {}
+    
+    def log(self, output_str, win_name="Log"):
+        x = self.index.get(win_name, 0)
+        self.vis.text(output_str, win=win_name, append=False if x == 0 else True)
+        self.index[win_name] = x + 1
 
     def plot_many_stack(self, points, win_name="", options={}):
         '''
