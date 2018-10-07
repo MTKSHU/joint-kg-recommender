@@ -1,7 +1,19 @@
-from jTransUP.data.preprocess import processKG
+from jTransUP.data.load_rating_data import load_data
+from jTransUP.data.load_kg_rating_data import loadR2KgMap
+import os
 
-kg_path = '/Users/caoyixin/Github/joint-kg-recommender/datasets/dbbook2014/kg/'
-ent_vocab_file = kg_path + 'entity_vocab.dat'
-rel_vocab_file = kg_path + 'predicate_vocab.dat'
+data_path = "/Users/caoyixin/Github/joint-kg-recommender/datasets/dbbook2014/"
+# data_path = "/Users/caoyixin/Github/joint-kg-recommender/datasets/ml1m/"
 
-processKG(kg_path, ent_vocab_file=ent_vocab_file, rel_vocab_file=rel_vocab_file)
+batch_size = 10
+from jTransUP.data.load_kg_rating_data import loadR2KgMap
+
+i2kg_file = os.path.join(data_path, 'i2kg_map.tsv')
+i2kg_pairs = loadR2KgMap(i2kg_file)
+i_set = set([p[0] for p in i2kg_pairs])
+
+datasets, rating_iters, u_map, i_map, user_total, item_total = load_data(data_path, batch_size, item_vocab=i_set)
+
+trainList, testDict, validDict, allDict, testTotal, validTotal = datasets
+print("user:{}, item:{}!".format(user_total, item_total))
+print("totally ratings for {} train, {} valid, and {} test!".format(len(trainList), validTotal, testTotal))

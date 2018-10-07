@@ -3,39 +3,41 @@ import gflags
 import torch
 from copy import deepcopy
 from functools import reduce
+import os
 
-from jTransUP.data import load_rating_data
-from jTransUP.utils.data import MakeTrainIterator, MakeEvalIterator
+from jTransUP.data import load_rating_data, load_triple_data, load_kg_rating_data
+from jTransUP.utils.data import MakeTrainIterator, MakeRatingEvalIterator, MakeTripleEvalIterator
 import jTransUP.models.transUP as transup
 import jTransUP.models.bprmf as bprmf
-
-def get_data_manager(dataset):
-    # Select data format.
-    if dataset in ["ml1m","dbbook2014"]:
-        data_manager = load_rating_data
-    else:
-        raise NotImplementedError
-
-    return data_manager
-
-def load_data(FLAGS, logger):
-    data_manager = get_data_manager(FLAGS.dataset)
-
-    trainDict, testDict, validDict, allRatingDict, user_total, item_total, trainTotal, testTotal, validTotal = data_manager.load_data(FLAGS.data_path+FLAGS.dataset, logger=logger)
-
-    train_iter = MakeTrainIterator(trainDict, item_total, FLAGS.batch_size,negtive_samples=FLAGS.negtive_samples, allRatingDict=allRatingDict)
-
-    test_iter = MakeEvalIterator(testDict, item_total, FLAGS.batch_size, allRatingDict=allRatingDict)
-
-    valid_iter = None
-    if validDict is not None:
-        valid_iter = MakeEvalIterator(validDict, item_total, FLAGS.batch_size, allRatingDict=allRatingDict)
-
-    return train_iter, test_iter, valid_iter, user_total, item_total, trainTotal, testTotal, validTotal, testDict, validDict
+import jTransUP.models.transH as transh
 
 def get_flags():
-    gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf"], "")
-    gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "")
+    gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm",
+                                                "transE", "transh", "transR", "transD", "cofm", "jTransUP" ], "")
+    gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "including ratings.csv, r2kg.tsv and a kg dictionary containing kg_hop[0-9].dat")
+    gflags.DEFINE_bool(
+        "mapped_vocab_to_filter",
+        False,
+        "If set to True, only keep those items and entitie aligned.")
+    gflags.DEFINE_bool(
+        "filter_wrong_corrupted",
+        True,
+        "If set to True, filter test samples from train and validations.")
+    gflags.DEFINE_bool(
+        "filter_relation",
+        True,
+        "If set to True, filter predined relations.")
+    gflags.DEFINE_bool(
+        "filter_unseen_samples",
+        True,
+        "")
+    gflags.DEFINE_bool(
+        "shuffle_data_split",
+        False,
+        "")
+    gflags.DEFINE_float("train_ratio", 0.7, ".")
+    gflags.DEFINE_float("test_ratio", 0.2, ".")
+
     gflags.DEFINE_float("learning_rate", 0.001, "Used in optimizer.")
     gflags.DEFINE_integer(
         "early_stopping_steps_to_wait",
@@ -115,8 +117,8 @@ def flag_defaults(FLAGS):
 
 def init_model(
         FLAGS,
-        user_total,
-        item_total,
+        u_e_total,
+        i_r_total,
         logger):
     # Choose model.
     logger.info("Building model.")
@@ -124,10 +126,12 @@ def init_model(
         build_model = transup.build_model
     elif FLAGS.model_type == "bprmf":
         build_model = bprmf.build_model
+    elif FLAGS.model_type == "transh":
+        build_model = transh.build_model
     else:
         raise NotImplementedError
 
-    model = build_model(FLAGS, user_total, item_total)
+    model = build_model(FLAGS, u_e_total, i_r_total)
 
     # Print model size.
     logger.info("Architecture: {}".format(model))

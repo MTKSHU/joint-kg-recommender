@@ -13,15 +13,13 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable as V
 
-from jTransUP.models.base import get_flags, flag_defaults, init_model
-from jTransUP.data.load_rating_data import load_data
+from jTransUP.models.base import get_flags, flag_defaults, load_data
+from jTransUP.models.base import init_model
 from jTransUP.utils.trainer import ModelTrainer
 from jTransUP.utils.misc import Accumulator, getPerformance, evalProcess
 from jTransUP.utils.misc import to_gpu
 from jTransUP.utils.loss import bprLoss, orthogonalLoss, normLoss
 from jTransUP.utils.visuliazer import Visualizer
-from jTransUP.data.load_kg_rating_data import loadR2KgMap
-from jTransUP.utils.data import getEvalRatingBatch, getTrainRatingBatch
 
 FLAGS = gflags.FLAGS
 
@@ -42,23 +40,22 @@ def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, evalDi
     pred_dict = {}
     for rating_batch in eval_iter:
         if rating_batch is None : break
-        u_ids, i_ids = getEvalRatingBatch(rating_batch)
+        u_ids, i_ids = rating_batch
         score = model(u_ids, i_ids)
         pred_ratings = zip(u_ids, i_ids, score.data.cpu().numpy())
-        pred_dict = evalProcess(list(pred_ratings), pred_dict, is_descending=True if model_target==1 else False)
+        pred_dict = evalProcess(list(pred_ratings), pred_dict, topn=FLAGS.topn, target=model_target)
         pbar.update(1)
+        
+    f1, p, r, hit, ndcg = getPerformance(pred_dict, evalDict)
     pbar.close()
-    
-    f1, p, r, hit, ndcg, mean_rank = getPerformance(pred_dict, evalDict, topn=FLAGS.topn)
 
-    logger.info("f1:{:.4f}, p:{:.4f}, r:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, mean_rank:{:.4f}, topn:{}.".format(f1, p, r, hit, ndcg, mean_rank, FLAGS.topn))
+    logger.info("f1:{:.4f}, p:{:.4f}, r:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, topn:{}.".format(f1, p, r, hit, ndcg, FLAGS.topn))
 
-    return f1, p, r, hit, ndcg, mean_rank
+    return f1, p, r, hit, ndcg
 
-def train_loop(FLAGS, model, trainer, rating_iters, datasets,
-            user_total, item_total, actual_test_total, actual_valid_total, logger, vis=None, show_sample=False):
-    train_iter, test_iter, valid_iter = rating_iters
-    trainList, testDict, validDict, allDict, testTotal, validTotal = datasets
+def train_loop(FLAGS, model, trainer, train_iter, test_iter, valid_iter,
+            user_total, item_total, test_total, valid_total, validDict, testDict, logger, vis=None, show_sample=False):
+
     # Train.
     logger.info("Training.")
 
@@ -80,15 +77,12 @@ def train_loop(FLAGS, model, trainer, rating_iters, datasets,
                 pbar.close()
             total_loss /= FLAGS.eval_interval_steps
             logger.info("train loss:{:.4f}!".format(total_loss))
-           
-            if validTotal > 0:
-                dev_performance = evaluate(FLAGS, model, user_total, item_total, actual_valid_total, valid_iter, validDict, logger, show_sample=show_sample)
             
-            test_performance = evaluate(FLAGS, model, user_total, item_total, actual_test_total, test_iter, testDict, logger, show_sample=show_sample)
-
-            if validTotal == 0: 
-                dev_performance = test_performance
-
+            if valid_total > 0:
+                dev_performance = evaluate(FLAGS, model, user_total, item_total, valid_total, valid_iter, validDict, logger, show_sample=show_sample)
+            
+            test_performance = evaluate(FLAGS, model, user_total, item_total, test_total, test_iter, testDict, logger, show_sample=show_sample)
+            if valid_total == 0: dev_performance = test_performance
             trainer.new_performance(dev_performance, test_performance)
 
             pbar = tqdm(total=FLAGS.eval_interval_steps)
@@ -102,11 +96,10 @@ def train_loop(FLAGS, model, trainer, rating_iters, datasets,
                 vis.plot_many_stack({'Valid Recall':dev_performance[2], 'Test Recall':test_performance[2]}, win_name="Recall@{}".format(FLAGS.topn))
                 vis.plot_many_stack({'Valid Hit':dev_performance[3], 'Test Hit':test_performance[3]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
                 vis.plot_many_stack({'Valid NDCG':dev_performance[4], 'Test NDCG':test_performance[4]}, win_name="NDCG@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'Valid MeanRank':dev_performance[5], 'Test MeanRank':test_performance[5]}, win_name="MeanRank@{}".format(FLAGS.topn))
             total_loss = 0.0
 
         rating_batch = next(train_iter)
-        u, pi, ni = getTrainRatingBatch(rating_batch, item_total, allDict)
+        u, pi, ni = rating_batch
 
         # set model in training mode
         model.train()
@@ -174,24 +167,12 @@ def run(only_forward=False):
     logger.info("Flag Values:\n" + json.dumps(FLAGS.FlagValuesDict(), indent=4, sort_keys=True))
 
     # load data
-    dataset_path = os.path.join(FLAGS.data_path, FLAGS.dataset)
+    rating_datasets, triple_datasets, i2kg_map, kg2i_map = load_data(FLAGS, logger)
 
-    # load mapped item vocab for filtering
-    i_set = None
-    if FLAGS.mapped_vocab_to_filter:
-        i2kg_file = os.path.join(dataset_path, 'i2kg_map.tsv')
-        i2kg_pairs = loadR2KgMap(i2kg_file)
-        i_set = set([p[0] for p in i2kg_pairs])
+    # construct data iter
 
-    datasets, rating_iters, u_map, i_map, user_total, item_total = load_data(dataset_path, FLAGS.batch_size, filter_wrong_corrupted=FLAGS.filter_wrong_corrupted, item_vocab=i_set, logger=logger, filter_unseen_samples=FLAGS.filter_unseen_samples, shuffle_data_split=FLAGS.shuffle_data_split, train_ratio=FLAGS.train_ratio, test_ratio=FLAGS.test_ratio)
-
-    trainList, testDict, validDict, allDict, testTotal, validTotal = datasets
-    train_iter, test_iter, valid_iter = rating_iters
-
-    trainTotal = len(trainList)
-    actual_test_total = len(testDict) * item_total - trainTotal - validTotal
-
-    actual_valid_total = 0 if valid_iter is None else len(validDict) * item_total - trainTotal - testTotal
+    test_total = user_total*item_total - trainTotal - validTotal
+    valid_total = 0 if valid_iter is None else user_total*item_total - trainTotal - testTotal
 
     model = init_model(FLAGS, user_total, item_total, logger)
     epoch_length = math.ceil( trainTotal / FLAGS.batch_size )
@@ -203,7 +184,7 @@ def run(only_forward=False):
             model,
             user_total,
             item_total,
-            actual_test_total,
+            test_total,
             test_iter,
             testDict,
             logger,
@@ -213,12 +194,15 @@ def run(only_forward=False):
             FLAGS,
             model,
             trainer,
-            rating_iters,
-            datasets,
+            train_iter,
+            test_iter,
+            valid_iter,
             user_total,
             item_total,
-            actual_test_total,
-            actual_valid_total,
+            test_total,
+            valid_total,
+            validDict,
+            testDict,
             logger,
             vis=vis,
             show_sample=False)

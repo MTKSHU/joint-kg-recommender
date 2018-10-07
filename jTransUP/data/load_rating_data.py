@@ -1,156 +1,154 @@
 import os
-from jTransUP.data.preprocess import process
+from jTransUP.data.preprocess import processRating
+from jTransUP.utils.data import MakeTrainIterator, MakeRatingEvalIterator
 import math
 import random
 from copy import deepcopy
+from jTransUP.utils.misc import Rating
 
-def preprocessData(rating_file, train_ratio = 0.7, test_ratio = 0.1, is_shuffle=False, is_filter=True):
-    # valid ratio could be 1-train_ratio-test_ratio, and maybe zero
-    user_dict, u_map_dict, i_map_dict = process(rating_file)
-    
-    assert train_ratio > 0 and train_ratio < 1, "train ratio out of range!"
-    assert test_ratio > 0 and test_ratio < 1, "test ratio out of range!"
-
-    valid_ratio = 1 - train_ratio - test_ratio
-    assert valid_ratio >= 0 and valid_ratio < 1, "valid ratio out of range!"
-
-    train_item_set = set()
-    for u_id in user_dict:
-        tmp_item_list = user_dict[u_id]
-
-        n_items = len(tmp_item_list)
-        n_train = math.ceil(n_items * train_ratio)
-        n_valid = math.ceil(n_items * valid_ratio) if valid_ratio > 0 else 0
-
-        if is_shuffle : random.shuffle(tmp_item_list)
-        tmp_train_list = [i for i in tmp_item_list[0:n_train]]
-        train_item_set.update(tmp_train_list)
-        tmp_valid_list = [i for i in tmp_item_list[n_train:n_train+n_valid]]
-        tmp_test_list = [i for i in tmp_item_list[n_train+n_valid:]]
-
-        user_dict[u_id] = (tmp_train_list, tmp_valid_list, tmp_test_list)
-    
-    if is_filter:
-        for u_id in user_dict:
-            item_list = user_dict[u_id]
-            valid_list = [i_id for i_id in item_list[1] if i_id in train_item_set]
-            test_list = [i_id for i_id in item_list[2] if i_id in train_item_set]
-            user_dict[u_id] = (item_list[0], valid_list, test_list)
-
-    return user_dict, u_map_dict, i_map_dict
-
-
-def loadRatings(fileName):
-    with open(fileName, 'r') as fin:
-        rating_total = 0
-        ratingDict = {}
+def loadVocab(filename):
+    with open(filename, 'r') as fin:
+        vocab_total = 0
+        vocab = {}
         for line in fin:
-            line_split = line.split(' ')
-            if len(line_split) < 2 : continue
-            user = int(line_split[0])
-            item_set = set([int(i) for i in line_split[1:]])
-            ratingDict[user] = item_set
-            rating_total += len(item_set)
+            line_split = line.strip().split('\t')
+            if len(line_split) != 2 : continue
+            mapped_id = int(line_split[0])
+            org_id = int(line_split[1])
+            vocab[org_id] = mapped_id
+            vocab_total += 1
 
-    return rating_total, ratingDict
+    return vocab_total, vocab
 
-def load_data(data_path, logger=None):
-    train_ratio = 0.7
-    test_ratio = 0.2
-    isShuffle = True
-    is_filter = True
+def loadRatingList(filename):
+    with open(filename, 'r') as fin:
+        rating_total = 0
+        rating_list = []
+        for line in fin:
+            line_split = line.strip().split('\t')
+            if len(line_split) != 3 : continue
+            u_id = int(line_split[0])
+            i_id = int(line_split[1])
+            r_score = int(line_split[2])
+            rating_list.append(Rating(u_id, i_id, r_score))
+            rating_total += 1
+
+    return rating_total, rating_list
+
+def loadRatingDict(filename):
+    with open(filename, 'r') as fin:
+        rating_total = 0
+        rating_dict = {}
+        for line in fin:
+            line_split = line.strip().split('\t')
+            if len(line_split) != 3 : continue
+            u_id = int(line_split[0])
+            i_id = int(line_split[1])
+            r_score = int(line_split[2])
+            tmp_items = rating_dict.get(u_id, set())
+            tmp_items.add(i_id)
+            rating_dict[u_id] = tmp_items
+            rating_total += 1
+
+    return rating_total, rating_dict
+
+def load_data(data_path, batch_size, filter_wrong_corrupted=True, item_vocab=None, logger=None, filter_unseen_samples=True, shuffle_data_split=False, train_ratio=0.7, test_ratio=0.2):
 
     train_file = os.path.join(data_path, "train.dat")
     test_file = os.path.join(data_path, "test.dat")
     valid_file = os.path.join(data_path, "valid.dat") if 1 - train_ratio - test_ratio != 0 else None
 
-    u_map_file = os.path.join(data_path, "user_vocab.dat")
-    i_map_file = os.path.join(data_path, "item_vocab.dat")
+    u_map_file = os.path.join(data_path, "u_map.dat")
+    i_map_file = os.path.join(data_path, "i_map.dat")
 
     if not os.path.exists(train_file) or not os.path.exists(test_file) or \
     not os.path.exists(u_map_file) or not os.path.exists(i_map_file):
         rating_file = os.path.join(data_path, "ratings.csv")
         assert os.path.exists(rating_file), "make sure {}, {}, {} and {} exists or {}!".format(train_file, test_file, u_map_file, i_map_file, rating_file)
 
-        str_is_shuffle = "shuffle and split" if isShuffle else "split without shuffle"
+        str_is_shuffle = "shuffle and split" if shuffle_data_split else "split without shuffle"
         if logger is not None:
             logger.debug("{} {} for {:.1f} training, {:.1f} validation and {:.1f} testing!".format(
             str_is_shuffle, rating_file, train_ratio, 1-train_ratio-test_ratio, test_ratio
         ))
 
-        user_dict, u_map_dict, i_map_dict = preprocessData(rating_file, train_ratio=train_ratio, test_ratio=test_ratio, is_shuffle=isShuffle, is_filter=is_filter)
+        train_list, valid_list, test_list, u_map, i_map = processRating(rating_file, item_vocab=item_vocab, train_ratio = train_ratio, test_ratio = test_ratio, is_shuffle=shuffle_data_split, is_filter=filter_unseen_samples)
 
-        f_train = open(train_file, 'w')
-        f_test = open(test_file, 'w')
-        f_valid = open(valid_file, 'w') if valid_file is not None else None
+        # save ent_dic, rel_dic 
+        with open(u_map_file, 'w') as fout:
+            for org_u_id in u_map:
+                fout.write('{}\t{}\n'.format(u_map[org_u_id], org_u_id))
+        with open(i_map_file, 'w') as fout:
+            for org_i_id in i_map:
+                fout.write('{}\t{}\n'.format(i_map[org_i_id], org_i_id))
+        with open(train_file, 'w') as fout:
+            for rating in train_list:
+                fout.write('{}\t{}\t{}\n'.format(rating.u, rating.i, rating.r))
+        with open(test_file, 'w') as fout:
+            for rating in test_list:
+                fout.write('{}\t{}\t{}\n'.format(rating.u, rating.i, rating.r))
+        
+        if len(valid_list) > 0:
+            with open(valid_file, 'w') as fout:
+                for rating in valid_list:
+                    fout.write('{}\t{}\t{}\n'.format(rating.u, rating.i, rating.r))
 
-        for u_id in user_dict:
-            f_train.write(str(u_id) + ' ' + ' '.join([str(i) for i in user_dict[u_id][0]]) + '\n')
-            f_test.write(str(u_id) + ' ' + ' '.join([str(i) for i in user_dict[u_id][2]]) + '\n')
-            if f_valid is not None :
-                f_valid.write(str(u_id) + ' ' + ' '.join([str(i) for i in user_dict[u_id][1]]) + '\n')
-        f_train.close()
-        f_test.close()
-        if f_valid is not None : f_valid.close()
-
-        fu = open(u_map_file, 'w')
-        fi = open(i_map_file, 'w')
-
-        for u_id in u_map_dict.keys():
-            fu.write(str(u_id) + ' ' + str(u_map_dict[u_id]) + '\n')
-        fu.close()
-
-        for i_id in i_map_dict.keys():
-            fi.write(str(i_id) + ' ' + str(i_map_dict[i_id]) + '\n')
-        fi.close()
-
-    trainTotal, trainDict = loadRatings(train_file)
-    testTotal, testDict = loadRatings(test_file)
-    
+    trainTotal, trainList = loadRatingList(train_file)
+    testTotal, testDict = loadRatingDict(test_file)
     validTotal = 0
-    validDict = None
+    validDict = {}
     if valid_file is not None and os.path.exists(valid_file):
-        validTotal, validDict = loadRatings(valid_file)
+        validTotal, validDict = loadRatingDict(valid_file)
     
     if logger is not None:
         logger.info("Totally {} train, {} test and {} valid ratings!".format(trainTotal, testTotal, validTotal))
     
-    # get item total
-    item_total = 0
-    with open(i_map_file, 'r') as fin:
-        for line in fin:
-            if len(line) > 0:
-                item_total += 1
     # get user total
-    user_total = 0
-    with open(u_map_file, 'r') as fin:
-        for line in fin:
-            if len(line) > 0:
-                user_total += 1
+    user_total, u_map = loadVocab(u_map_file)
+    # get relation total
+    item_total, i_map = loadVocab(i_map_file)
     
     if logger is not None:
         logger.info("successfully load {} users and {} items!".format(user_total, item_total))
     
-    allRatingDict = deepcopy(trainDict)
-    
-    for u in testDict:
-        item_set = allRatingDict.get(u, set())
-        item_set |= testDict[u]
-        allRatingDict[u] = item_set
+    train_iter = MakeTrainIterator(trainList, batch_size, negtive_samples=1)
 
-    if validDict is not None:
-        for u in validDict:
-            item_set = allRatingDict.get(u, set())
-            item_set |= validDict[u]
-            allRatingDict[u] = item_set
+    allDict = {}
+    if filter_wrong_corrupted:
+        allDict = deepcopy(testDict)
+        if validTotal > 0 :
+            for u_id in validDict:
+                tmp_items = allDict.get(u_id, set())
+                tmp_items |= validDict[u_id]
+                allDict[u_id] = tmp_items
+        for rating in trainList:
+            tmp_items = allDict.get(rating.u, set())
+            tmp_items.add(rating.i)
+            allDict[rating.u] = tmp_items
 
-    return trainDict, testDict, validDict, allRatingDict, user_total, item_total, trainTotal, testTotal, validTotal
+    test_iter = MakeRatingEvalIterator(testDict, item_total, batch_size, allDict=allDict)
+
+    valid_iter = None
+    if validTotal > 0:
+        valid_iter = MakeRatingEvalIterator(validDict, item_total, batch_size, allDict=allDict)
+
+    datasets = (trainList, testDict, validDict, allDict, testTotal, validTotal)
+    rating_iters = (train_iter, test_iter, valid_iter)
+
+    return datasets, rating_iters, u_map, i_map, user_total, item_total
 
 if __name__ == "__main__":
     # Demo:
-    trainDict, testDict, validDict, allRatingDict, user_total, item_total, trainTotal, testTotal, validTotal = load_data("/Users/caoyixin/Github/joint-kg-recommender/datasets/ml1m/")
+    data_path = "/Users/caoyixin/Github/joint-kg-recommender/datasets/ml1m/"
+    batch_size = 10
+    from jTransUP.data.load_kg_rating_data import loadR2KgMap
+
+    i2kg_file = os.path.join(data_path, 'i2kg_map.tsv')
+    i2kg_pairs = loadR2KgMap(i2kg_file)
+    i_set = set([p[0] for p in i2kg_pairs])
+
+    datasets, rating_iters, u_map, i_map, user_total, item_total = load_data(data_path, batch_size, item_vocab=i_set)
+
+    trainList, testDict, validDict, allDict, testTotal, validTotal = datasets
     print("user:{}, item:{}!".format(user_total, item_total))
-    print("totally ratings for {} train, {} valid, and {} test!".format(trainTotal, validTotal, testTotal))
-    import random
-    u_id = random.randrange(user_total)
-    print("u:{} has brought items for train {}, valid {} and test {}!".format(u_id, trainDict[u_id], validDict[u_id] if validDict is not None else [], testDict[u_id]))
+    print("totally ratings for {} train, {} valid, and {} test!".format(len(trainList), item_total, testTotal))

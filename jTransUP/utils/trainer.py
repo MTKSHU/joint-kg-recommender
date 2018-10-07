@@ -34,8 +34,8 @@ class ModelTrainer(object):
 
         # record best dev, test acc
         self.best_dev_f1 = 0.0
-        self.best_dev_performance = 0.0, 0.0, 0.0, 0.0, 0.0
-        self.best_test_performance = 0.0, 0.0, 0.0, 0.0, 0.0
+        self.best_dev_performance = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        self.best_test_performance = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
         # GPU support.
         to_gpu(model)
@@ -81,7 +81,7 @@ class ModelTrainer(object):
 
     def new_performance(self, dev_performance, test_performance):
         # Track best dev error
-        f1, _, _, _, _ = dev_performance
+        f1, _, _, _, _, _ = dev_performance
         if f1 > check_rho * self.best_dev_f1:
             self.best_step = self.step
             self.logger.info( "Checkpointing ..." )
