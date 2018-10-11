@@ -8,6 +8,7 @@ tqdm.monitor_iterval=0
 import math
 import time
 import random
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -16,49 +17,47 @@ from torch.autograd import Variable as V
 from jTransUP.models.base import get_flags, flag_defaults, init_model
 from jTransUP.data.load_rating_data import load_data
 from jTransUP.utils.trainer import ModelTrainer
-from jTransUP.utils.misc import Accumulator, getPerformance, evalProcess
-from jTransUP.utils.misc import to_gpu
+from jTransUP.utils.misc import evalRecProcess, to_gpu
 from jTransUP.utils.loss import bprLoss, orthogonalLoss, normLoss
 from jTransUP.utils.visuliazer import Visualizer
-from jTransUP.data.load_kg_rating_data import loadR2KgMap
-from jTransUP.utils.data import getEvalRatingBatch, getTrainRatingBatch
+from jTransUP.utils.data import getNegRatings
 
 FLAGS = gflags.FLAGS
 
-def evaluate(FLAGS, model, user_total, item_total, eval_total, eval_iter, evalDict, logger, show_sample=False):
+def evaluate(FLAGS, model, user_total, item_total, eval_iter, eval_dict, all_dicts, logger, eval_descending=True, show_sample=False):
     # Evaluate
-    total_batches = math.ceil(float(eval_total) / FLAGS.batch_size)
+    total_batches = len(eval_iter)
     # processing bar
     pbar = tqdm(total=total_batches)
     pbar.set_description("Run Eval")
 
-    # key is u_id, value is a sorted list of size FLAGS.topn
-    pred_dict = {}
-
-    model_target = 1 if FLAGS.model_type == "bprmf" else -1
-
     model.eval()
+    results = []
+    for u_ids in eval_iter:
+        u_var = to_gpu(V(torch.LongTensor(u_ids)))
+        # batch * item
+        scores = model.evaluate(u_var)
+        preds = zip(u_ids, scores.data.cpu().numpy())
 
-    pred_dict = {}
-    for rating_batch in eval_iter:
-        if rating_batch is None : break
-        u_ids, i_ids = getEvalRatingBatch(rating_batch)
-        score = model(u_ids, i_ids)
-        pred_ratings = zip(u_ids, i_ids, score.data.cpu().numpy())
-        pred_dict = evalProcess(list(pred_ratings), pred_dict, is_descending=True if model_target==1 else False)
+        results.extend( evalRecProcess(list(preds), eval_dict, all_dicts=all_dicts, descending=eval_descending, num_processes=FLAGS.num_processes, topn=FLAGS.topn, queue_limit=FLAGS.max_queue) )
+
         pbar.update(1)
     pbar.close()
-    
-    f1, p, r, hit, ndcg, mean_rank = getPerformance(pred_dict, evalDict, topn=FLAGS.topn)
 
-    logger.info("f1:{:.4f}, p:{:.4f}, r:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, mean_rank:{:.4f}, topn:{}.".format(f1, p, r, hit, ndcg, mean_rank, FLAGS.topn))
+    f1, p, r, hit, ndcg = np.array(results).mean(axis=0)
 
-    return f1, p, r, hit, ndcg, mean_rank
+    logger.info("f1:{:.4f}, p:{:.4f}, r:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, topn:{}.".format(f1, p, r, hit, ndcg, FLAGS.topn))
 
-def train_loop(FLAGS, model, trainer, rating_iters, datasets,
-            user_total, item_total, actual_test_total, actual_valid_total, logger, vis=None, show_sample=False):
-    train_iter, test_iter, valid_iter = rating_iters
-    trainList, testDict, validDict, allDict, testTotal, validTotal = datasets
+    return f1, p, r, hit, ndcg
+
+def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
+            user_total, item_total, logger, vis=None, show_sample=False):
+    train_iter, train_total, train_list, train_dict = train_dataset
+
+    all_dicts = None
+    if FLAGS.filter_wrong_corrupted:
+        all_dicts = [train_dict] + [tmp_data[3] for tmp_data in eval_datasets]
+
     # Train.
     logger.info("Training.")
 
@@ -66,8 +65,6 @@ def train_loop(FLAGS, model, trainer, rating_iters, datasets,
     pbar = None
     total_loss = 0.0
     for _ in range(trainer.step, FLAGS.training_steps):
-        
-        model_target = 1 if FLAGS.model_type == "bprmf" else -1
 
         if FLAGS.early_stopping_steps_to_wait > 0 and (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
             logger.info('No improvement after ' +
@@ -80,16 +77,16 @@ def train_loop(FLAGS, model, trainer, rating_iters, datasets,
                 pbar.close()
             total_loss /= FLAGS.eval_interval_steps
             logger.info("train loss:{:.4f}!".format(total_loss))
-           
-            if validTotal > 0:
-                dev_performance = evaluate(FLAGS, model, user_total, item_total, actual_valid_total, valid_iter, validDict, logger, show_sample=show_sample)
-            
-            test_performance = evaluate(FLAGS, model, user_total, item_total, actual_test_total, test_iter, testDict, logger, show_sample=show_sample)
 
-            if validTotal == 0: 
-                dev_performance = test_performance
+            performances = []
+            for i, eval_data in enumerate(eval_datasets):
+                all_eval_dicts = None
+                if FLAGS.filter_wrong_corrupted:
+                    all_eval_dicts = [train_dict] + [tmp_data[3] for j, tmp_data in enumerate(eval_datasets) if j!=i]
 
-            trainer.new_performance(dev_performance, test_performance)
+                performances.append( evaluate(FLAGS, model, user_total, item_total, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
+
+            trainer.new_performance(performances[0], performances)
 
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
@@ -97,16 +94,24 @@ def train_loop(FLAGS, model, trainer, rating_iters, datasets,
             if vis is not None:
                 vis.plot_many_stack({'Train Loss': total_loss},
                 win_name="Loss Curve")
-                vis.plot_many_stack({'Valid F1':dev_performance[0], 'Test F1':test_performance[0]}, win_name="F1 Score@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'Valid Precision':dev_performance[1], 'Test Precision':test_performance[1]}, win_name="Precision@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'Valid Recall':dev_performance[2], 'Test Recall':test_performance[2]}, win_name="Recall@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'Valid Hit':dev_performance[3], 'Test Hit':test_performance[3]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'Valid NDCG':dev_performance[4], 'Test NDCG':test_performance[4]}, win_name="NDCG@{}".format(FLAGS.topn))
-                vis.plot_many_stack({'Valid MeanRank':dev_performance[5], 'Test MeanRank':test_performance[5]}, win_name="MeanRank@{}".format(FLAGS.topn))
+                for i, performance in enumerate(performances):
+                    vis.plot_many_stack({'Eval {} F1'.format(i):performance[0]}, win_name="F1 Score@{}".format(FLAGS.topn))
+                    
+                    vis.plot_many_stack({'Eval {} Precision'.format(i):performance[1]}, win_name="Precision@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack({'Eval {} Recall'.format(i):performance[2]}, win_name="Recall@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack({'Eval {} Hit'.format(i):performance[3]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack({'Eval {} NDCG'.format(i):performance[4]}, win_name="NDCG@{}".format(FLAGS.topn))
             total_loss = 0.0
 
         rating_batch = next(train_iter)
-        u, pi, ni = getTrainRatingBatch(rating_batch, item_total, allDict)
+        u, pi, ni = getNegRatings(rating_batch, item_total, all_dicts=all_dicts)
+
+        u_var = to_gpu(V(torch.LongTensor(u)))
+        pi_var = to_gpu(V(torch.LongTensor(pi)))
+        ni_var = to_gpu(V(torch.LongTensor(ni)))
 
         # set model in training mode
         model.train()
@@ -114,17 +119,14 @@ def train_loop(FLAGS, model, trainer, rating_iters, datasets,
         trainer.optimizer_zero_grad()
 
         # Run model. output: batch_size * cand_num
-        pos_score = model(u, pi)
-        neg_score = model(u, ni)
+        pos_score = model(u_var, pi_var)
+        neg_score = model(u_var, ni_var)
 
         # Calculate loss.
-        if FLAGS.loss_type == "margin":
-            losses = nn.MarginRankingLoss(margin=FLAGS.margin).forward(pos_score, neg_score, model_target)
-        elif FLAGS.loss_type == "bpr":
-            losses = bprLoss(pos_score, neg_score, target=model_target)
+        losses = bprLoss(pos_score, neg_score, target=trainer.model_target)
         
         if FLAGS.model_type == "transup":
-            losses += orthogonalLoss(model.pref_weight, model.norm_weight)
+            losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight)
         # Backward pass.
         losses.backward()
 
@@ -152,20 +154,16 @@ def run(only_forward=False):
                 win_name="Parameter")
 
     # set logger
+    log_file = os.path.join(FLAGS.log_path, FLAGS.experiment_name + ".log")
     logger = logging.getLogger()
     log_level = logging.DEBUG if FLAGS.log_level == "debug" else logging.INFO
     logger.setLevel(level=log_level)
-    
-    log_path = FLAGS.log_path + FLAGS.dataset
-    if not os.path.exists(log_path) : os.makedirs(log_path)
-    log_file = os.path.join(log_path, FLAGS.experiment_name + ".log")
     # Formatter
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     # FileHandler
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-    
     # StreamHandler
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
@@ -175,55 +173,46 @@ def run(only_forward=False):
 
     # load data
     dataset_path = os.path.join(FLAGS.data_path, FLAGS.dataset)
+    eval_files = FLAGS.test_files.split(':')
 
-    # load mapped item vocab for filtering
-    i_set = None
-    if FLAGS.mapped_vocab_to_filter:
-        i2kg_file = os.path.join(dataset_path, 'i2kg_map.tsv')
-        i2kg_pairs = loadR2KgMap(i2kg_file)
-        i_set = set([p[0] for p in i2kg_pairs])
+    train_dataset, eval_datasets, user_total, item_total = load_data(dataset_path, eval_files, FLAGS.batch_size, logger=logger, negtive_samples=FLAGS.negtive_samples)
 
-    datasets, rating_iters, u_map, i_map, user_total, item_total = load_data(dataset_path, FLAGS.batch_size, filter_wrong_corrupted=FLAGS.filter_wrong_corrupted, item_vocab=i_set, logger=logger, filter_unseen_samples=FLAGS.filter_unseen_samples, shuffle_data_split=FLAGS.shuffle_data_split, train_ratio=FLAGS.train_ratio, test_ratio=FLAGS.test_ratio)
+    train_iter, train_total, train_list, train_dict = train_dataset
 
-    trainList, testDict, validDict, allDict, testTotal, validTotal = datasets
-    train_iter, test_iter, valid_iter = rating_iters
-
-    trainTotal = len(trainList)
-    actual_test_total = len(testDict) * item_total - trainTotal - validTotal
-
-    actual_valid_total = 0 if valid_iter is None else len(validDict) * item_total - trainTotal - testTotal
-
-    model = init_model(FLAGS, user_total, item_total, logger)
-    epoch_length = math.ceil( trainTotal / FLAGS.batch_size )
+    model = init_model(FLAGS, user_total, item_total, 0, 0, logger)
+    epoch_length = math.ceil( train_total / FLAGS.batch_size )
     trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
+
     # Do an evaluation-only run.
     if only_forward:
-        evaluate(
-            FLAGS,
-            model,
-            user_total,
-            item_total,
-            actual_test_total,
-            test_iter,
-            testDict,
-            logger,
-            show_sample=False)
+        for i, eval_data in enumerate(eval_datasets):
+            all_dicts = None
+            if FLAGS.filter_wrong_corrupted:
+                all_dicts = [train_dict] + [tmp_data[3] for j, tmp_data in enumerate(eval_datasets) if j!=i]
+            evaluate(
+                FLAGS,
+                model,
+                user_total,
+                item_total,
+                eval_data[0],
+                eval_data[3],
+                all_dicts,
+                logger,
+                eval_descending=True if trainer.model_target == 1 else False,
+                show_sample=False)
     else:
         train_loop(
             FLAGS,
             model,
             trainer,
-            rating_iters,
-            datasets,
+            train_dataset,
+            eval_datasets,
             user_total,
             item_total,
-            actual_test_total,
-            actual_valid_total,
             logger,
             vis=vis,
             show_sample=False)
     
-
 if __name__ == '__main__':
     get_flags()
 

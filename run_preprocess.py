@@ -1,19 +1,36 @@
-from jTransUP.data.load_rating_data import load_data
-from jTransUP.data.load_kg_rating_data import loadR2KgMap
+from jTransUP.data.preprocessRatings import preprocess as preprocessRating
+from jTransUP.data.preprocessTriples import preprocess as preprocessKG
 import os
+import logging
 
-data_path = "/Users/caoyixin/Github/joint-kg-recommender/datasets/dbbook2014/"
-# data_path = "/Users/caoyixin/Github/joint-kg-recommender/datasets/ml1m/"
+data_path = "/Users/caoyixin/Github/joint-kg-recommender/datasets/"
+dataset = 'dbbook2014'
 
-batch_size = 10
-from jTransUP.data.load_kg_rating_data import loadR2KgMap
+dataset_path = os.path.join(data_path, dataset)
+kg_path = os.path.join(dataset_path, 'kg')
 
-i2kg_file = os.path.join(data_path, 'i2kg_map.tsv')
-i2kg_pairs = loadR2KgMap(i2kg_file)
-i_set = set([p[0] for p in i2kg_pairs])
+rating_file = os.path.join(dataset_path, 'ratings.csv')
+triple_file = os.path.join(kg_path, "kg_hop0.dat")
+relation_file = os.path.join(kg_path, "relation_filter.dat")
 
-datasets, rating_iters, u_map, i_map, user_total, item_total = load_data(data_path, batch_size, item_vocab=i_set)
+log_path = dataset_path
 
-trainList, testDict, validDict, allDict, testTotal, validTotal = datasets
-print("user:{}, item:{}!".format(user_total, item_total))
-print("totally ratings for {} train, {} valid, and {} test!".format(len(trainList), validTotal, testTotal))
+logger = logging.getLogger()
+logger.setLevel(level=logging.DEBUG)
+
+log_file = os.path.join(dataset_path, "data_preprocess.log")
+# Formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# FileHandler
+file_handler = logging.FileHandler(log_file)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# StreamHandler
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
+
+preprocessRating(rating_file, dataset_path, logger=logger)
+
+preprocessKG([triple_file], kg_path, relation_file=relation_file, logger=logger)

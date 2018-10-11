@@ -6,37 +6,26 @@ from functools import reduce
 import os
 
 from jTransUP.data import load_rating_data, load_triple_data, load_kg_rating_data
-from jTransUP.utils.data import MakeTrainIterator, MakeRatingEvalIterator, MakeTripleEvalIterator
+
 import jTransUP.models.transUP as transup
 import jTransUP.models.bprmf as bprmf
 import jTransUP.models.transH as transh
+import jTransUP.models.jTransUP as jtransup
 
 def get_flags():
     gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm",
-                                                "transE", "transh", "transR", "transD", "cofm", "jTransUP" ], "")
+                                                "transe", "transh", "transr", "transd", "cofm", "jtransup" ], "")
     gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "including ratings.csv, r2kg.tsv and a kg dictionary containing kg_hop[0-9].dat")
-    gflags.DEFINE_bool(
-        "mapped_vocab_to_filter",
-        False,
-        "If set to True, only keep those items and entitie aligned.")
     gflags.DEFINE_bool(
         "filter_wrong_corrupted",
         True,
         "If set to True, filter test samples from train and validations.")
     gflags.DEFINE_bool(
-        "filter_relation",
-        True,
-        "If set to True, filter predined relations.")
-    gflags.DEFINE_bool(
-        "filter_unseen_samples",
-        True,
-        "")
-    gflags.DEFINE_bool(
-        "shuffle_data_split",
+        "share_embeddings",
         False,
         "")
-    gflags.DEFINE_float("train_ratio", 0.7, ".")
-    gflags.DEFINE_float("test_ratio", 0.2, ".")
+    gflags.DEFINE_integer("max_queue", 10, ".")
+    gflags.DEFINE_integer("num_processes", 4, ".")
 
     gflags.DEFINE_float("learning_rate", 0.001, "Used in optimizer.")
     gflags.DEFINE_integer(
@@ -51,7 +40,7 @@ def get_flags():
     gflags.DEFINE_integer("embedding_size", 64, ".")
     gflags.DEFINE_integer("negtive_samples", 1, ".")
     gflags.DEFINE_integer("batch_size", 512, "Minibatch size.")
-    gflags.DEFINE_enum("optimizer_type", "SGD", ["Adam", "SGD", "Adagrad", "Rmsprop"], "")
+    gflags.DEFINE_enum("optimizer_type", "Adagrad", ["Adam", "SGD", "Adagrad", "Rmsprop"], "")
     gflags.DEFINE_float("learning_rate_decay_when_no_progress", 0.5,
                         "Used in optimizer. Decay the LR by this much every epoch steps if a new best has not been set in the last epoch.")
 
@@ -63,7 +52,6 @@ def get_flags():
         "training_steps",
         1400000,
         "Stop training after this point.")
-    gflags.DEFINE_enum("loss_type", "bpr", ["bpr", "margin"], "")
     gflags.DEFINE_float("clipping_max_value", 5.0, "")
     gflags.DEFINE_float("margin", 1.0, "Used in margin loss.")
     gflags.DEFINE_float("momentum", 0.9, "The momentum of the optimizer.")
@@ -73,6 +61,7 @@ def get_flags():
 
     gflags.DEFINE_string("experiment_name", None, "")
     gflags.DEFINE_string("data_path", None, "")
+    gflags.DEFINE_string("test_files", None, "multiple filenames separated by ':'.")
     gflags.DEFINE_string("log_path", None, "")
     gflags.DEFINE_enum("log_level", "debug", ["debug", "info"], "")
     gflags.DEFINE_string(
@@ -94,8 +83,9 @@ def flag_defaults(FLAGS):
 
     if not FLAGS.experiment_name:
         timestamp = str(int(time.time()))
-        FLAGS.experiment_name = "{}-{}".format(
+        FLAGS.experiment_name = "{}-{}-{}".format(
             FLAGS.dataset,
+            FLAGS.model_type,
             timestamp,
         )
 
@@ -117,8 +107,10 @@ def flag_defaults(FLAGS):
 
 def init_model(
         FLAGS,
-        u_e_total,
-        i_r_total,
+        user_total,
+        item_total,
+        entity_total,
+        relation_total,
         logger):
     # Choose model.
     logger.info("Building model.")
@@ -128,10 +120,12 @@ def init_model(
         build_model = bprmf.build_model
     elif FLAGS.model_type == "transh":
         build_model = transh.build_model
+    elif FLAGS.model_type == "jtransup":
+        build_model = jtransup.build_model
     else:
         raise NotImplementedError
 
-    model = build_model(FLAGS, u_e_total, i_r_total)
+    model = build_model(FLAGS, user_total, item_total, entity_total, relation_total)
 
     # Print model size.
     logger.info("Architecture: {}".format(model))

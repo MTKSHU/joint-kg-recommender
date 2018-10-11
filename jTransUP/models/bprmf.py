@@ -5,7 +5,7 @@ from torch.autograd import Variable as V
 
 from jTransUP.utils.misc import to_gpu
 
-def build_model(FLAGS, user_total, item_total):
+def build_model(FLAGS, user_total, item_total, entity_total, relation_total):
     model_cls = BPRMF
     return model_cls(
                 FLAGS.embedding_size,

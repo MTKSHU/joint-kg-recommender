@@ -12,12 +12,17 @@ def get_checkpoint_path(FLAGS, suffix=".ckpt"):
         checkpoint_path = os.path.join(FLAGS.ckpt_path, FLAGS.experiment_name + suffix)
     return checkpoint_path
 
+def get_model_target(model_type):
+    target = 1 if model_type == "bprmf" else -1
+    return target
+
 check_rho = 1.0
 class ModelTrainer(object):
     def __init__(self, model, logger, epoch_length, FLAGS):
         self.model = model
         self.logger = logger
         self.epoch_length = epoch_length
+        self.model_target = get_model_target(FLAGS.model_type)
 
         self.logger.info('One epoch is ' + str(self.epoch_length) + ' steps.')
 
@@ -33,9 +38,8 @@ class ModelTrainer(object):
         self.best_step = 0
 
         # record best dev, test acc
-        self.best_dev_f1 = 0.0
-        self.best_dev_performance = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-        self.best_test_performance = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+        self.best_dev_performance = 0.0
+        self.best_performances = None
 
         # GPU support.
         to_gpu(model)
@@ -50,7 +54,7 @@ class ModelTrainer(object):
             self.load(self.checkpoint_path)
             self.logger.info(
                 "Resuming at step: {} with best dev performance: {} and test performance : {}.".format(
-                    self.best_step, self.best_dev_performance, self.best_test_performance))
+                    self.best_step, self.best_dev_performance, self.best_performances))
 
     def reset(self):
         self.step = 0
@@ -79,18 +83,16 @@ class ModelTrainer(object):
     def optimizer_zero_grad(self):
         self.optimizer.zero_grad()
 
-    def new_performance(self, dev_performance, test_performance):
+    def new_performance(self, dev_performance, performances):
         # Track best dev error
-        f1, _, _, _, _, _ = dev_performance
-        if f1 > check_rho * self.best_dev_f1:
+        performance_to_care = dev_performance[0]
+        if performance_to_care > check_rho * self.best_dev_performance:
             self.best_step = self.step
             self.logger.info( "Checkpointing ..." )
             self.save(self.checkpoint_path)
 
-            self.best_test_performance = test_performance
-            self.best_dev_performance = dev_performance
-            self.best_dev_f1 = f1
-
+            self.best_performances = performances
+            self.best_dev_performance = performance_to_care
         # Learning rate decay
         if self.learning_rate_decay_when_no_progress != 1.0:
             last_epoch_start = self.step - (self.step % self.epoch_length)
@@ -111,7 +113,7 @@ class ModelTrainer(object):
         save_dict = {
             'step': self.step,
             'best_step': self.best_step,
-            'best_dev_f1': self.best_dev_f1,
+            'best_dev_performance': self.best_dev_performance,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict()
             }
@@ -135,4 +137,4 @@ class ModelTrainer(object):
 
         self.step = checkpoint['step']
         self.best_step = checkpoint['best_step']
-        self.best_dev_f1 = checkpoint['best_dev_f1']
+        self.best_dev_performance = checkpoint['best_dev_performance']

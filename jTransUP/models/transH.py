@@ -5,13 +5,13 @@ from torch.autograd import Variable as V
 
 from jTransUP.utils.misc import to_gpu, projection_transH_pytorch
 
-def build_model(FLAGS, ent_total, rel_total):
+def build_model(FLAGS, user_total, item_total, entity_total, relation_total):
     model_cls = TransHModel
     return model_cls(
                 L1_flag = FLAGS.L1_flag,
                 embedding_size = FLAGS.embedding_size,
-                ent_total = ent_total,
-                rel_total = rel_total
+                ent_total = entity_total,
+                rel_total = relation_total
     )
 
 class TransHModel(nn.Module):
@@ -67,4 +67,54 @@ class TransHModel(nn.Module):
             score = torch.sum(torch.abs(proj_h_e + r_e - proj_t_e), 1)
         else:
             score = torch.sum((proj_h_e + r_e - proj_t_e) ** 2, 1)
+        return score
+    
+    def evaluateHead(self, t, r):
+        batch_size = len(t)
+        # batch * dim
+        t_e = self.ent_embeddings(t)
+        r_e = self.rel_embeddings(r)
+        norm_e = self.norm_embeddings(r)
+
+        proj_t_e = projection_transH_pytorch(t_e, norm_e)
+        c_h_e = proj_t_e - r_e
+        
+        # batch * entity * dim
+        c_h_expand = c_h_e.expand(self.ent_total, batch_size, self.embedding_size).permute(1, 0, 2)
+
+        # batch * entity * dim
+        norm_expand = norm_e.expand(self.ent_total, batch_size, self.embedding_size).permute(1, 0, 2)
+        ent_expand = self.ent_embeddings.weight.expand(batch_size, self.ent_total, self.embedding_size)
+        proj_ent_e = projection_transH_pytorch(ent_expand, norm_expand)
+
+        # batch * entity
+        if self.L1_flag:
+            score = torch.sum(torch.abs(c_h_expand-proj_ent_e), 2)
+        else:
+            score = torch.sum((c_h_expand-proj_ent_e) ** 2, 2)
+        return score
+    
+    def evaluateTail(self, h, r):
+        batch_size = len(h)
+        # batch * dim
+        h_e = self.ent_embeddings(h)
+        r_e = self.rel_embeddings(r)
+        norm_e = self.norm_embeddings(r)
+
+        proj_h_e = projection_transH_pytorch(h_e, norm_e)
+        c_t_e = proj_h_e + r_e
+        
+        # batch * entity * dim
+        c_t_expand = c_t_e.expand(self.ent_total, batch_size, self.embedding_size).permute(1, 0, 2)
+
+        # batch * entity * dim
+        norm_expand = norm_e.expand(self.ent_total, batch_size, self.embedding_size).permute(1, 0, 2)
+        ent_expand = self.ent_embeddings.weight.expand(batch_size, self.ent_total, self.embedding_size)
+        proj_ent_e = projection_transH_pytorch(ent_expand, norm_expand)
+
+        # batch * entity
+        if self.L1_flag:
+            score = torch.sum(torch.abs(c_t_expand-proj_ent_e), 2)
+        else:
+            score = torch.sum((c_t_expand-proj_ent_e) ** 2, 2)
         return score
