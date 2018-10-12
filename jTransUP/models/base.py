@@ -58,10 +58,12 @@ def get_flags():
     gflags.DEFINE_integer("seed", 0, "Fix the random seed. Except for 0, which means no setting of random seed.")
     gflags.DEFINE_integer("topn", 10, "")
     gflags.DEFINE_integer("num_preferences", 4, "")
+    gflags.DEFINE_float("joint_ratio", 0.5, "(0 - 1). The train ratio of recommendation, kg is 1 - joint_ratio.")
 
     gflags.DEFINE_string("experiment_name", None, "")
     gflags.DEFINE_string("data_path", None, "")
-    gflags.DEFINE_string("test_files", None, "multiple filenames separated by ':'.")
+    gflags.DEFINE_string("rec_test_files", None, "multiple filenames separated by ':'.")
+    gflags.DEFINE_string("kg_test_files", None, "multiple filenames separated by ':'.")
     gflags.DEFINE_string("log_path", None, "")
     gflags.DEFINE_enum("log_level", "debug", ["debug", "info"], "")
     gflags.DEFINE_string(

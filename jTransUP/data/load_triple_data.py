@@ -31,7 +31,6 @@ def loadTriples(filename):
 
 def loadVocab(filename):
     with open(filename, 'r', encoding='utf-8') as fin:
-        vocab_total = 0
         vocab = {}
         for line in fin:
             line_split = line.strip().split('\t')
@@ -39,9 +38,8 @@ def loadVocab(filename):
             e_id = int(line_split[0])
             e_uri = line_split[1]
             vocab[e_uri] = e_id
-            vocab_total += 1
 
-    return vocab_total, vocab
+    return vocab
 
 def load_data(kg_path, eval_filenames, batch_size, negtive_samples=1, logger=None):
 
@@ -66,12 +64,12 @@ def load_data(kg_path, eval_filenames, batch_size, negtive_samples=1, logger=Non
         logger.info("Totally {} train triples, {} eval triples in files: {}!".format(train_total, ",".join(eval_totals), ";".join(eval_files)))
     
     # get entity total
-    entity_total, e_map = loadVocab(e_map_file)
+    e_map = loadVocab(e_map_file)
     # get relation total
-    relation_total, r_map = loadVocab(r_map_file)
+    r_map = loadVocab(r_map_file)
 
     if logger is not None:
-        logger.info("successfully load {} entities and {} relations!".format(entity_total, relation_total))
+        logger.info("successfully load {} entities and {} relations!".format(len(e_map), len(r_map)))
 
     train_iter = MakeTrainIterator(train_list, batch_size, negtive_samples=negtive_samples)
 
@@ -85,7 +83,7 @@ def load_data(kg_path, eval_filenames, batch_size, negtive_samples=1, logger=Non
     
     train_dataset = (train_iter, train_total, train_list, train_head_dict, train_tail_dict)
     
-    return train_dataset, new_eval_datasets, entity_total, relation_total
+    return train_dataset, new_eval_datasets, e_map, r_map
 
 if __name__ == "__main__":
     # Demo:

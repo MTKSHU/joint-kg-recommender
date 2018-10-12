@@ -24,7 +24,7 @@ from jTransUP.utils.data import getNegRatings
 
 FLAGS = gflags.FLAGS
 
-def evaluate(FLAGS, model, user_total, item_total, eval_iter, eval_dict, all_dicts, logger, eval_descending=True, show_sample=False):
+def evaluate(FLAGS, model, eval_iter, eval_dict, all_dicts, logger, eval_descending=True, show_sample=False):
     # Evaluate
     total_batches = len(eval_iter)
     # processing bar
@@ -84,7 +84,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                 if FLAGS.filter_wrong_corrupted:
                     all_eval_dicts = [train_dict] + [tmp_data[3] for j, tmp_data in enumerate(eval_datasets) if j!=i]
 
-                performances.append( evaluate(FLAGS, model, user_total, item_total, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
+                performances.append( evaluate(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
 
             trainer.new_performance(performances[0], performances)
 
@@ -94,16 +94,27 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
             if vis is not None:
                 vis.plot_many_stack({'Train Loss': total_loss},
                 win_name="Loss Curve")
+                f1_vis_dict = {}
+                p_vis_dict = {}
+                r_vis_dict = {}
+                hit_vis_dict = {}
+                ndcg_vis_dict = {}
                 for i, performance in enumerate(performances):
-                    vis.plot_many_stack({'Eval {} F1'.format(i):performance[0]}, win_name="F1 Score@{}".format(FLAGS.topn))
-                    
-                    vis.plot_many_stack({'Eval {} Precision'.format(i):performance[1]}, win_name="Precision@{}".format(FLAGS.topn))
+                    f1_vis_dict['Eval {} F1'.format(i)] = performance[0]
+                    p_vis_dict['Eval {} Precision'.format(i)] = performance[1]
+                    r_vis_dict['Eval {} Recall'.format(i)] = performance[2]
+                    hit_vis_dict['Eval {} Hit'.format(i)] = performance[3]
+                    ndcg_vis_dict['Eval {} NDCG'.format(i)] = performance[4]
 
-                    vis.plot_many_stack({'Eval {} Recall'.format(i):performance[2]}, win_name="Recall@{}".format(FLAGS.topn))
+                vis.plot_many_stack(f1_vis_dict, win_name="F1 Score@{}".format(FLAGS.topn))
+                
+                vis.plot_many_stack(p_vis_dict, win_name="Precision@{}".format(FLAGS.topn))
 
-                    vis.plot_many_stack({'Eval {} Hit'.format(i):performance[3]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
+                vis.plot_many_stack(r_vis_dict, win_name="Recall@{}".format(FLAGS.topn))
 
-                    vis.plot_many_stack({'Eval {} NDCG'.format(i):performance[4]}, win_name="NDCG@{}".format(FLAGS.topn))
+                vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
+
+                vis.plot_many_stack(ndcg_vis_dict, win_name="NDCG@{}".format(FLAGS.topn))
             total_loss = 0.0
 
         rating_batch = next(train_iter)
@@ -173,11 +184,14 @@ def run(only_forward=False):
 
     # load data
     dataset_path = os.path.join(FLAGS.data_path, FLAGS.dataset)
-    eval_files = FLAGS.test_files.split(':')
+    eval_files = FLAGS.rec_test_files.split(':')
 
-    train_dataset, eval_datasets, user_total, item_total = load_data(dataset_path, eval_files, FLAGS.batch_size, logger=logger, negtive_samples=FLAGS.negtive_samples)
+    train_dataset, eval_datasets, u_map, i_map = load_data(dataset_path, eval_files, FLAGS.batch_size, logger=logger, negtive_samples=FLAGS.negtive_samples)
 
     train_iter, train_total, train_list, train_dict = train_dataset
+
+    user_total = len(u_map)
+    item_total = len(i_map)
 
     model = init_model(FLAGS, user_total, item_total, 0, 0, logger)
     epoch_length = math.ceil( train_total / FLAGS.batch_size )
@@ -192,8 +206,6 @@ def run(only_forward=False):
             evaluate(
                 FLAGS,
                 model,
-                user_total,
-                item_total,
                 eval_data[0],
                 eval_data[3],
                 all_dicts,

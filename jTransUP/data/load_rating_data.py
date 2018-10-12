@@ -4,7 +4,6 @@ from jTransUP.utils.data import MakeTrainIterator, MakeEvalIterator
 
 def loadVocab(filename):
     with open(filename, 'r', encoding='utf-8') as fin:
-        vocab_total = 0
         vocab = {}
         for line in fin:
             line_split = line.strip().split('\t')
@@ -12,9 +11,8 @@ def loadVocab(filename):
             mapped_id = int(line_split[0])
             org_id = int(line_split[1])
             vocab[org_id] = mapped_id
-            vocab_total += 1
 
-    return vocab_total, vocab
+    return vocab
 
 # dict:{u_id:set(i_ids), ... }
 def loadRatings(filename):
@@ -60,12 +58,12 @@ def load_data(data_path, eval_filenames, batch_size, negtive_samples=1, logger=N
         logger.info("Totally {} train ratings, {} eval ratings in files: {}!".format(train_total, ",".join(eval_totals), ";".join(eval_files)))
     
     # get user total
-    user_total, u_map = loadVocab(u_map_file)
+    u_map = loadVocab(u_map_file)
     # get item total
-    item_total, i_map = loadVocab(i_map_file)
+    i_map = loadVocab(i_map_file)
     
     if logger is not None:
-        logger.info("successfully load {} users and {} items!".format(user_total, item_total))
+        logger.info("successfully load {} users and {} items!".format(len(u_map), len(i_map)))
     
     train_iter = MakeTrainIterator(train_list, batch_size, negtive_samples=negtive_samples)
 
@@ -76,7 +74,7 @@ def load_data(data_path, eval_filenames, batch_size, negtive_samples=1, logger=N
         new_eval_datasets.append([tmp_iter, eval_data[0], eval_data[1], eval_data[2]])
 
     train_dataset = (train_iter, train_total, train_list, train_dict)
-    return train_dataset, new_eval_datasets, user_total, item_total
+    return train_dataset, new_eval_datasets, u_map, i_map
 
 if __name__ == "__main__":
     # Demo:

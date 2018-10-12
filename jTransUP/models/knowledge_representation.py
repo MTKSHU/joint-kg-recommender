@@ -133,10 +133,15 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
             if vis is not None:
                 vis.plot_many_stack({'Train Loss': total_loss},
                 win_name="Loss Curve")
+                hit_vis_dict = {}
+                meanrank_vis_dict = {}
                 for i, performance in enumerate(performances):
-                    vis.plot_many_stack({'Eval {} Hit'.format(i):performance[0]}, win_name="Hit Ratio@{}".format(FLAGS.topn))
+                    hit_vis_dict['Eval {} Hit'.format(i)] = performance[0]
+                    meanrank_vis_dict['Eval {} Hit'.format(i)] = performance[1]
 
-                    vis.plot_many_stack({'Eval {} MeanRank'.format(i):performance[1]}, win_name="MeanRank@{}".format(FLAGS.topn))
+                vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
+
+                vis.plot_many_stack(meanrank_vis_dict, win_name="MeanRank@{}".format(FLAGS.topn))
             total_loss = 0.0
 
         triple_batch = next(train_iter)
@@ -218,10 +223,13 @@ def run(only_forward=False):
 
     # load data
     kg_path = os.path.join(os.path.join(FLAGS.data_path, FLAGS.dataset), 'kg')
-    eval_files = FLAGS.test_files.split(':')
+    eval_files = FLAGS.kg_test_files.split(':')
 
-    train_dataset, eval_datasets, entity_total, relation_total = load_data(kg_path, eval_files, FLAGS.batch_size, logger=logger, negtive_samples=FLAGS.negtive_samples)
+    train_dataset, eval_datasets, e_map, r_map = load_data(kg_path, eval_files, FLAGS.batch_size, logger=logger, negtive_samples=FLAGS.negtive_samples)
 
+    entity_total = len(e_map)
+    relation_total = len(r_map)
+    
     train_iter, train_total, train_list, train_head_dict, train_tail_dict = train_dataset
 
     model = init_model(FLAGS, 0, 0, entity_total, relation_total, logger)

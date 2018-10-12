@@ -72,7 +72,8 @@ class jTransUPModel(nn.Module):
         self.ent_embeddings.weight.data = normalize_ent_emb
         self.ent_embeddings = to_gpu(self.ent_embeddings)
 
-        if self.is_share and self.item_total == self.ent_total:
+        if self.is_share:
+            assert self.item_total == self.ent_total, "item numbers didn't match entities!"
             self.item_embeddings = self.ent_embeddings
         else:
             item_weight = torch.FloatTensor(self.item_total, self.embedding_size)
@@ -118,4 +119,88 @@ class jTransUPModel(nn.Module):
         else:
             raise NotImplementedError
         
+        return score
+    
+    def evaluateRec(self, u_ids, all_i_ids=None):
+        batch_size = len(u_ids)
+        all_i = self.item_embeddings(all_i_ids) if all_i_ids is not None and self.is_share else self.item_embeddings.weight
+        item_total, dim = all_i.size()
+
+        u = self.user_embeddings(u_ids)
+        # expand u and i to pair wise match, batch * item * dim 
+        u_e = u.expand(item_total, batch_size, dim).permute(1, 0, 2)
+        
+        i_e = all_i.expand(batch_size, item_total, dim)
+
+        # batch * item * pref
+        pre_probs = torch.matmul(u_e + i_e, torch.t(self.rel_embeddings.weight)) / 2
+        # batch * item * dim
+        r_e = torch.matmul(pre_probs, self.rel_embeddings.weight)
+        norm = torch.matmul(pre_probs, self.norm_embeddings.weight)
+
+        # batch * item * dim
+        proj_u_e = projection_transH_pytorch(u_e, norm)
+        proj_i_e = projection_transH_pytorch(i_e, norm)
+
+        # batch * item
+        if self.L1_flag:
+            score = torch.sum(torch.abs(proj_u_e + r_e - proj_i_e), 2)
+        else:
+            score = torch.sum((proj_u_e + r_e - proj_i_e) ** 2, 2)
+        return score
+    
+    def evaluateHead(self, t, r, all_e_ids=None):
+        batch_size = len(t)
+        all_e = self.ent_embeddings(all_e_ids) if all_e_ids is not None and self.is_share else self.ent_embeddings.weight
+        ent_total, dim = all_e.size()
+        # batch * dim
+        t_e = self.ent_embeddings(t)
+        r_e = self.rel_embeddings(r)
+        norm_e = self.norm_embeddings(r)
+
+        proj_t_e = projection_transH_pytorch(t_e, norm_e)
+        c_h_e = proj_t_e - r_e
+        
+        # batch * entity * dim
+        c_h_expand = c_h_e.expand(ent_total, batch_size, dim).permute(1, 0, 2)
+
+        # batch * entity * dim
+        norm_expand = norm_e.expand(ent_total, batch_size, dim).permute(1, 0, 2)
+
+        ent_expand = all_e.expand(batch_size, ent_total, dim)
+        proj_ent_e = projection_transH_pytorch(ent_expand, norm_expand)
+
+        # batch * entity
+        if self.L1_flag:
+            score = torch.sum(torch.abs(c_h_expand-proj_ent_e), 2)
+        else:
+            score = torch.sum((c_h_expand-proj_ent_e) ** 2, 2)
+        return score
+    
+    def evaluateTail(self, h, r, all_e_ids=None):
+        batch_size = len(h)
+        all_e = self.ent_embeddings(all_e_ids) if all_e_ids is not None and self.is_share else self.ent_embeddings.weight
+        ent_total, dim = all_e.size()
+        # batch * dim
+        h_e = self.ent_embeddings(h)
+        r_e = self.rel_embeddings(r)
+        norm_e = self.norm_embeddings(r)
+
+        proj_h_e = projection_transH_pytorch(h_e, norm_e)
+        c_t_e = proj_h_e + r_e
+        
+        # batch * entity * dim
+        c_t_expand = c_t_e.expand(ent_total, batch_size, dim).permute(1, 0, 2)
+
+        # batch * entity * dim
+        norm_expand = norm_e.expand(ent_total, batch_size, dim).permute(1, 0, 2)
+        
+        ent_expand = all_e.expand(batch_size, ent_total, dim)
+        proj_ent_e = projection_transH_pytorch(ent_expand, norm_expand)
+
+        # batch * entity
+        if self.L1_flag:
+            score = torch.sum(torch.abs(c_t_expand-proj_ent_e), 2)
+        else:
+            score = torch.sum((c_t_expand-proj_ent_e) ** 2, 2)
         return score
