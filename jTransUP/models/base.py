@@ -11,6 +11,10 @@ import jTransUP.models.transUP as transup
 import jTransUP.models.bprmf as bprmf
 import jTransUP.models.transH as transh
 import jTransUP.models.jTransUP as jtransup
+import jTransUP.models.fm as fm
+import jTransUP.models.transE as transe
+import jTransUP.models.transR as transr
+import jTransUP.models.cofm as cofm
 
 def get_flags():
     gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm",
@@ -120,8 +124,16 @@ def init_model(
         build_model = transup.build_model
     elif FLAGS.model_type == "bprmf":
         build_model = bprmf.build_model
+    elif FLAGS.model_type == "fm":
+        build_model = fm.build_model
+    elif FLAGS.model_type == "transe":
+        build_model = transe.build_model
     elif FLAGS.model_type == "transh":
         build_model = transh.build_model
+    elif FLAGS.model_type == "transr":
+        build_model = transr.build_model
+    elif FLAGS.model_type == "cofm":
+        build_model = cofm.build_model
     elif FLAGS.model_type == "jtransup":
         build_model = jtransup.build_model
     else:

@@ -125,7 +125,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
 
                 performances.append( evaluate(FLAGS, model, entity_total, relation_total, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
 
-            trainer.new_performance(performances[0], performances)
+            is_best = trainer.new_performance(performances[0], performances)
 
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
@@ -138,6 +138,12 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                 for i, performance in enumerate(performances):
                     hit_vis_dict['Eval {} Hit'.format(i)] = performance[0]
                     meanrank_vis_dict['Eval {} Hit'.format(i)] = performance[1]
+                
+                if is_best:
+                    log_str = ["Best performances in {} step!".format(trainer.best_step)]
+                    log_str += ["{} : {}.".format(s, str(hit_vis_dict[s])) for s in hit_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(meanrank_vis_dict[s])) for s in meanrank_vis_dict]
+                    vis.log("\n".join(log_str), win_name="Best Performances")
 
                 vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
 
@@ -170,9 +176,10 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
         
         ent_embeddings = model.ent_embeddings(torch.cat([ph_var, pt_var, nh_var, nt_var]))
         rel_embeddings = model.rel_embeddings(torch.cat([pr_var, nr_var]))
-        norm_embeddings = model.norm_embeddings(torch.cat([pr_var, nr_var]))
-		
-        losses += loss.orthogonalLoss(rel_embeddings, norm_embeddings)
+        
+        if FLAGS.model_type == "transh":
+            norm_embeddings = model.norm_embeddings(torch.cat([pr_var, nr_var]))
+            losses += loss.orthogonalLoss(rel_embeddings, norm_embeddings)
 
         losses = losses + loss.normLoss(ent_embeddings) + loss.normLoss(rel_embeddings)
         
@@ -271,6 +278,8 @@ def run(only_forward=False):
             logger,
             vis=vis,
             show_sample=False)
+    if vis is not None:
+        vis.log("Finish!", win_name="Best Performances")
 
 if __name__ == '__main__':
     get_flags()

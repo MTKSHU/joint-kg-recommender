@@ -192,19 +192,19 @@ def loadRelationTypes(filename):
     return one2oneRelations, one2manyRelations, many2oneRelations, many2manyRelations
 '''
 
-def cutLowFrequentData(triple_list, entity_frequency_dict, low_frequence=10):
+def cutLowFrequentData(triple_list, entity_frequency_dict, ent_vocab_to_keep=None, low_frequence=10):
     tmp_entity_set = set()
     tmp_relation_set = set()
     filtered_triple_list = []
     for triple in triple_list:
-        if entity_frequency_dict.get(triple[0], 0) >=low_frequence and entity_frequency_dict.get(triple[1], 0)>=low_frequence:
+        if (entity_frequency_dict.get(triple[0], 0) >=low_frequence and entity_frequency_dict.get(triple[1], 0)>=low_frequence) or (triple[0] in ent_vocab_to_keep and triple[1] in ent_vocab_to_keep) or (triple[0] in ent_vocab_to_keep and entity_frequency_dict.get(triple[1], 0)>=low_frequence) or (entity_frequency_dict.get(triple[0], 0) >=low_frequence and triple[1] in ent_vocab_to_keep):
             filtered_triple_list.append(triple)
             tmp_entity_set.add(triple[0])
             tmp_entity_set.add(triple[1])
             tmp_relation_set.add(triple[2])
     return filtered_triple_list, tmp_entity_set, tmp_relation_set
 
-def preprocess(triple_files, out_path, relation_file=None, train_ratio=0.7, test_ratio=0.2, shuffle_data_split=True, filter_unseen_samples=True, low_frequence=10, logger=None):
+def preprocess(triple_files, out_path, entity_file=None, relation_file=None, train_ratio=0.7, test_ratio=0.2, shuffle_data_split=True, filter_unseen_samples=True, low_frequence=10, logger=None):
 
     train_file = os.path.join(out_path, "train.dat")
     test_file = os.path.join(out_path, "test.dat")
@@ -221,21 +221,29 @@ def preprocess(triple_files, out_path, relation_file=None, train_ratio=0.7, test
         logger.info("{} {} for {:.1f} training, {:.1f} validation and {:.1f} testing!".format( str_is_shuffle, file_str, train_ratio, 1-train_ratio-test_ratio, test_ratio ))
     
     # predifined vocab for filtering
-    ent_vocab = None
+    ent_keep_vocab = None
     rel_vocab = None
     if relation_file is not None and os.path.exists(relation_file):
         rel_vocab = set()
         with open(relation_file, 'r', encoding='utf-8') as fin:
             for line in fin:
                 rel_vocab.add(line.strip())
+    
+    if entity_file is not None and os.path.exists(entity_file):
+        ent_keep_vocab = set()
+        with open(entity_file, 'r', encoding='utf-8') as fin:
+            for line in fin:
+                line_split = line.strip().split('\t')
+                if len(line_split) < 3 : continue
+                ent_keep_vocab.add(line_split[2])
 
     triple_list = []
     ent_dic = {}
     for filename in triple_files:
-        triple_list, ent_dic = loadRawData(filename, ent_vocab=ent_vocab, rel_vocab=rel_vocab, triple_list=triple_list, ent_dic=ent_dic, logger=logger)
+        triple_list, ent_dic = loadRawData(filename, ent_vocab=None, rel_vocab=rel_vocab, triple_list=triple_list, ent_dic=ent_dic, logger=logger)
 
     # filter low frequent entities
-    filtered_triple_list, e_set, r_set = cutLowFrequentData(triple_list, ent_dic, low_frequence=low_frequence)
+    filtered_triple_list, e_set, r_set = cutLowFrequentData(triple_list, ent_dic, ent_vocab_to_keep=ent_keep_vocab, low_frequence=low_frequence)
     if logger is not None:
         logger.info("Cut infrequent entities (<={}), remaining {} facts of {} entities and {} relations!".format(low_frequence, len(filtered_triple_list), len(e_set), len(r_set) ) )
 
@@ -245,7 +253,7 @@ def preprocess(triple_files, out_path, relation_file=None, train_ratio=0.7, test
 
     if logger is not None:
         logger.debug("Spliting dataset and relation types are done!")
-        logger.info("Filtering unseen users and items ..." if filter_unseen_samples else "Not filter unseen users and items.")
+        logger.info("Filtering unseen entities and relations ..." if filter_unseen_samples else "Not filter unseen entities and relations.")
         logger.info("{} entities and {} relations, where {} train, {} valid, and {} test!".format(len(e_map), len(r_map), len(train_list), len(valid_list), len(test_list)))
         logger.info("where {} 1-1, {} 1-N, {} N-1, and {} N-N relations!".format(len(one2oneRelations), len(one2manyRelations), len(many2oneRelations), len(many2manyRelations) ))
 

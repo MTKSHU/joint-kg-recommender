@@ -84,6 +84,7 @@ class ModelTrainer(object):
         self.optimizer.zero_grad()
 
     def new_performance(self, dev_performance, performances):
+        is_best = False
         # Track best dev error
         performance_to_care = dev_performance[0]
         if performance_to_care > check_rho * self.best_dev_performance:
@@ -93,12 +94,14 @@ class ModelTrainer(object):
 
             self.best_performances = performances
             self.best_dev_performance = performance_to_care
+            is_best = True
         # Learning rate decay
         if self.learning_rate_decay_when_no_progress != 1.0:
             last_epoch_start = self.step - (self.step % self.epoch_length)
             if self.step - last_epoch_start <= self.eval_interval_steps and self.best_step < (last_epoch_start - self.epoch_length):
                     self.logger.info('No improvement after one epoch. Lowering learning rate.')
                     self.optimizer_reset(self.learning_rate * self.learning_rate_decay_when_no_progress)
+        return is_best
 
     def checkpoint(self):
         self.logger.info("Checkpointing.")

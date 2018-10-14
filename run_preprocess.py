@@ -12,6 +12,7 @@ kg_path = os.path.join(dataset_path, 'kg')
 rating_file = os.path.join(dataset_path, 'ratings.csv')
 triple_file = os.path.join(kg_path, "kg_hop0.dat")
 relation_file = os.path.join(kg_path, "relation_filter.dat")
+i2kg_file = os.path.join(dataset_path, "i2kg_map.tsv")
 
 log_path = dataset_path
 
@@ -31,6 +32,6 @@ stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 
-preprocessRating(rating_file, dataset_path, logger=logger)
+preprocessRating(rating_file, dataset_path, low_frequence=5, logger=logger)
 
-preprocessKG([triple_file], kg_path, relation_file=relation_file, logger=logger)
+preprocessKG([triple_file], kg_path, entity_file=i2kg_file, relation_file=relation_file, logger=logger)

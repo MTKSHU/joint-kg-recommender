@@ -92,6 +92,7 @@ def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eva
 
     # head prediction evaluation
     head_results = []
+    
     for batch_trs in eval_head_iter:
         t = [tr[0] for tr in batch_trs] if FLAGS.share_embeddings else [e_map[tr[0]] for tr in batch_trs]
         r = [tr[1] for tr in batch_trs]
@@ -104,7 +105,8 @@ def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eva
         head_results.extend( evalKGProcess(list(preds), eval_head_dict, all_dicts=all_head_dicts, descending=eval_descending, num_processes=FLAGS.num_processes, topn=FLAGS.topn, queue_limit=FLAGS.max_queue) )
 
         pbar.update(1)
-    # head prediction evaluation
+    
+    # tail prediction evaluation
     tail_results = []
     for batch_hrs in eval_tail_iter:
         h = [hr[0] for hr in batch_hrs] if FLAGS.share_embeddings else [e_map[hr[0]] for hr in batch_hrs]
@@ -166,6 +168,8 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
     # New Training Loop
     pbar = None
     total_loss = 0.0
+    pbar = tqdm(total=FLAGS.eval_interval_steps)
+    pbar.set_description("Training")
     for _ in range(trainer.step, FLAGS.training_steps):
 
         if FLAGS.early_stopping_steps_to_wait > 0 and (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
@@ -174,7 +178,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                        ' steps. Stopping training.')
             if pbar is not None: pbar.close()
             break
-        if trainer.step % FLAGS.eval_interval_steps == 0:
+        if trainer.step > 0 and trainer.step % FLAGS.eval_interval_steps == 0:
             if pbar is not None:
                 pbar.close()
             total_loss /= FLAGS.eval_interval_steps
@@ -198,7 +202,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
                 kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
 
-            trainer.new_performance(rec_performances[0], rec_performances)
+            is_best = trainer.new_performance(rec_performances[0], rec_performances)
 
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
@@ -223,6 +227,18 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                 for i, performance in enumerate(kg_performances):
                     kg_hit_dict['KG Eval {} Hit'.format(i)] = performance[0]
                     meanrank_dict['KG Eval {} MeanRank'.format(i)] = performance[1]
+
+                if is_best:
+                    log_str = ["Best performances in {} step!".format(trainer.best_step)]
+                    log_str += ["{} : {}.".format(s, str(f1_vis_dict[s])) for s in f1_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(p_vis_dict[s])) for s in p_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(r_vis_dict[s])) for s in r_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(hit_vis_dict[s])) for s in hit_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(ndcg_vis_dict[s])) for s in ndcg_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(kg_hit_dict[s])) for s in kg_hit_dict]
+                    log_str += ["{} : {}.".format(s, str(meanrank_dict[s])) for s in meanrank_dict]
+                    
+                    vis.log("\n".join(log_str), win_name="Best Performances")
 
                 vis.plot_many_stack(f1_dict, win_name="Rec F1 Score@{}".format(FLAGS.topn))
                 
@@ -305,9 +321,9 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             
             ent_embeddings = model.ent_embeddings(torch.cat([ph_var, pt_var, nh_var, nt_var]))
             rel_embeddings = model.rel_embeddings(torch.cat([pr_var, nr_var]))
-            norm_embeddings = model.norm_embeddings(torch.cat([pr_var, nr_var]))
-            
-            losses += loss.orthogonalLoss(rel_embeddings, norm_embeddings)
+            if FLAGS.model_type == "jtransup":
+                norm_embeddings = model.norm_embeddings(torch.cat([pr_var, nr_var]))
+                losses += loss.orthogonalLoss(rel_embeddings, norm_embeddings)
 
             losses = losses + loss.normLoss(ent_embeddings) + loss.normLoss(rel_embeddings)
         
@@ -446,6 +462,8 @@ def run(only_forward=False):
             logger,
             vis=vis,
             show_sample=False)
+    if vis is not None:
+        vis.log("Finish!", win_name="Best Performances")
 
 if __name__ == '__main__':
     get_flags()

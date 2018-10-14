@@ -86,7 +86,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
 
                 performances.append( evaluate(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
 
-            trainer.new_performance(performances[0], performances)
+            is_best = trainer.new_performance(performances[0], performances)
 
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
@@ -105,6 +105,16 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                     r_vis_dict['Eval {} Recall'.format(i)] = performance[2]
                     hit_vis_dict['Eval {} Hit'.format(i)] = performance[3]
                     ndcg_vis_dict['Eval {} NDCG'.format(i)] = performance[4]
+                
+                if is_best:
+                    log_str = ["Best performances in {} step!".format(trainer.best_step)]
+                    log_str += ["{} : {}.".format(s, str(f1_vis_dict[s])) for s in f1_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(p_vis_dict[s])) for s in p_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(r_vis_dict[s])) for s in r_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(hit_vis_dict[s])) for s in hit_vis_dict]
+                    log_str += ["{} : {}.".format(s, str(ndcg_vis_dict[s])) for s in ndcg_vis_dict]
+                    
+                    vis.log("\n".join(log_str), win_name="Best Performances")
 
                 vis.plot_many_stack(f1_vis_dict, win_name="F1 Score@{}".format(FLAGS.topn))
                 
@@ -224,6 +234,8 @@ def run(only_forward=False):
             logger,
             vis=vis,
             show_sample=False)
+    if vis is not None:
+        vis.log("Finish!", win_name="Best Performances")
     
 if __name__ == '__main__':
     get_flags()
