@@ -141,8 +141,8 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                 
                 if is_best:
                     log_str = ["Best performances in {} step!".format(trainer.best_step)]
-                    log_str += ["{} : {}.".format(s, str(hit_vis_dict[s])) for s in hit_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(meanrank_vis_dict[s])) for s in meanrank_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % hit_vis_dict[s]) for s in hit_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % meanrank_vis_dict[s]) for s in meanrank_vis_dict]
                     vis.log("\n".join(log_str), win_name="Best Performances")
 
                 vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
@@ -242,6 +242,9 @@ def run(only_forward=False):
     model = init_model(FLAGS, 0, 0, entity_total, relation_total, logger)
     epoch_length = math.ceil( train_total / FLAGS.batch_size )
     trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
+
+    if FLAGS.load_ckpt_file is not None:
+        trainer.loadEmbedding(FLAGS.load_ckpt_file, model.state_dict())
 
     # Do an evaluation-only run.
     if only_forward:

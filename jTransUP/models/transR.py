@@ -26,13 +26,20 @@ class TransRModel(nn.Module):
         self.embedding_size = embedding_size
         self.ent_total = ent_total
         self.rel_total = rel_total
+        self.is_pretrained = False
 
         ent_weight = torch.FloatTensor(self.ent_total, self.embedding_size)
         rel_weight = torch.FloatTensor(self.rel_total, self.embedding_size)
         proj_weight = torch.FloatTensor(self.rel_total, self.embedding_size * self.embedding_size)
         nn.init.xavier_uniform(ent_weight)
         nn.init.xavier_uniform(rel_weight)
-        nn.init.xavier_uniform(proj_weight)
+        
+        if self.is_pretrained:
+            nn.init.eye(proj_weight)
+            proj_weight = proj_weight.view(-1).expand(self.relation_total, -1)
+        else:
+            nn.init.xavier_uniform(proj_weight)
+            
         # init user and item embeddings
         self.ent_embeddings = nn.Embedding(self.ent_total, self.embedding_size)
         self.rel_embeddings = nn.Embedding(self.rel_total, self.embedding_size)

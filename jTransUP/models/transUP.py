@@ -29,6 +29,7 @@ class TransUPModel(nn.Module):
         self.user_total = user_total
         self.item_total = item_total
         self.preference_total = preference_total
+        self.is_pretrained = False
 
         user_weight = torch.FloatTensor(self.user_total, self.embedding_size)
         item_weight = torch.FloatTensor(self.item_total, self.embedding_size)

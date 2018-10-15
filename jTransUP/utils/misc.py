@@ -32,6 +32,10 @@ def projection_transR_pytorch_batch(original, proj_matrix):
     proj_matrix_e = proj_matrix.unsqueeze(1)
     return torch.matmul(proj_matrix_e, original_e).squeeze()
 
+# batch * dim
+def projection_transD_pytorch_samesize(entity_embedding, entity_projection, relation_projection):
+	return entity_embedding + torch.sum(entity_embedding * entity_projection, dim=len(entity_embedding.size())-1, keepdim=True) * relation_projection
+
 class Accumulator(object):
     """Accumulator. Makes it easy to keep a trailing list of statistics."""
 

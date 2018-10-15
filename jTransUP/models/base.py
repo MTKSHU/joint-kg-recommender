@@ -14,6 +14,7 @@ import jTransUP.models.jTransUP as jtransup
 import jTransUP.models.fm as fm
 import jTransUP.models.transE as transe
 import jTransUP.models.transR as transr
+import jTransUP.models.transD as transd
 import jTransUP.models.cofm as cofm
 
 def get_flags():
@@ -72,6 +73,9 @@ def get_flags():
     gflags.DEFINE_enum("log_level", "debug", ["debug", "info"], "")
     gflags.DEFINE_string(
         "ckpt_path", None, "Where to save/load checkpoints. If not set, the same as log_path")
+    
+    gflags.DEFINE_string(
+        "load_ckpt_file", None, "Where to load pretrained checkpoints.")
 
     gflags.DEFINE_boolean(
         "has_visualization",
@@ -132,6 +136,8 @@ def init_model(
         build_model = transh.build_model
     elif FLAGS.model_type == "transr":
         build_model = transr.build_model
+    elif FLAGS.model_type == "transd":
+        build_model = transd.build_model
     elif FLAGS.model_type == "cofm":
         build_model = cofm.build_model
     elif FLAGS.model_type == "jtransup":

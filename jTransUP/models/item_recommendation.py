@@ -17,7 +17,7 @@ from torch.autograd import Variable as V
 from jTransUP.models.base import get_flags, flag_defaults, init_model
 from jTransUP.data.load_rating_data import load_data
 from jTransUP.utils.trainer import ModelTrainer
-from jTransUP.utils.misc import evalRecProcess, to_gpu
+from jTransUP.utils.misc import evalRecProcess, to_gpu, USE_CUDA
 from jTransUP.utils.loss import bprLoss, orthogonalLoss, normLoss
 from jTransUP.utils.visuliazer import Visualizer
 from jTransUP.utils.data import getNegRatings
@@ -108,11 +108,11 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                 
                 if is_best:
                     log_str = ["Best performances in {} step!".format(trainer.best_step)]
-                    log_str += ["{} : {}.".format(s, str(f1_vis_dict[s])) for s in f1_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(p_vis_dict[s])) for s in p_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(r_vis_dict[s])) for s in r_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(hit_vis_dict[s])) for s in hit_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(ndcg_vis_dict[s])) for s in ndcg_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % f1_vis_dict[s]) for s in f1_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % p_vis_dict[s]) for s in p_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % r_vis_dict[s]) for s in r_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % hit_vis_dict[s]) for s in hit_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % ndcg_vis_dict[s]) for s in ndcg_vis_dict]
                     
                     vis.log("\n".join(log_str), win_name="Best Performances")
 
@@ -147,7 +147,10 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
         losses = bprLoss(pos_score, neg_score, target=trainer.model_target)
         
         if FLAGS.model_type == "transup":
-            losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight)
+            user_embeddings = model.user_embeddings(u_var)
+            item_embeddings = model.item_embeddings(torch.cat([pi_var, ni_var]))
+            losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight) + normLoss(user_embeddings) + normLoss(item_embeddings) + normLoss(model.pref_embeddings.weight)
+
         # Backward pass.
         losses.backward()
 
@@ -206,6 +209,8 @@ def run(only_forward=False):
     model = init_model(FLAGS, user_total, item_total, 0, 0, logger)
     epoch_length = math.ceil( train_total / FLAGS.batch_size )
     trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
+    if FLAGS.load_ckpt_file is not None:
+        trainer.loadEmbedding(FLAGS.load_ckpt_file, model.state_dict(), cpu=not USE_CUDA)
 
     # Do an evaluation-only run.
     if only_forward:

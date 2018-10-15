@@ -50,12 +50,12 @@ class ModelTrainer(object):
 
         # Load checkpoint if available.
         if FLAGS.eval_only_mode and os.path.isfile(self.checkpoint_path):
-            self.logger.info("Found best checkpoint, restoring.")
+            self.logger.info("Found checkpoint, restoring.")
             self.load(self.checkpoint_path)
             self.logger.info(
                 "Resuming at step: {} with best dev performance: {} and test performance : {}.".format(
                     self.best_step, self.best_dev_performance, self.best_performances))
-
+                
     def reset(self):
         self.step = 0
         self.best_step = 0
@@ -141,3 +141,51 @@ class ModelTrainer(object):
         self.step = checkpoint['step']
         self.best_step = checkpoint['best_step']
         self.best_dev_performance = checkpoint['best_dev_performance']
+    
+    def loadEmbedding(self, filename, embedding_names, cpu=False, e_remap=None, i_remap=None):
+        assert os.path.isfile(filename), "Checkpoint file not found!"
+        self.logger.info("Found checkpoint, restoring pre-trained embeddings.")
+
+        if cpu:
+            # Load GPU-based checkpoints on CPU
+            checkpoint = torch.load(
+                filename, map_location=lambda storage, loc: storage)
+        else:
+            checkpoint = torch.load(filename)
+        old_model_state_dict = checkpoint['model_state_dict']
+
+        model_dict = self.model.state_dict()
+
+        # 1. filter out unnecessary keys
+        pretrained_dict = {k: v for k, v in old_model_state_dict.items() if k in embedding_names}
+        # 2. overwrite entries in the existing state dict
+        model_dict.update(pretrained_dict)
+
+        # restore entities
+        if e_remap is not None and 'ent_embeddings.weight' in model_dict and 'ent_embeddings.weight' in embedding_names:
+            loaded_embeddings = model_dict['ent_embeddings.weight']
+            del (model_dict['ent_embeddings.weight'])
+
+            count = 0
+            for index in e_remap:
+                mapped_index = e_remap[index]
+                self.model.ent_embeddings.weight.data[mapped_index, :] = loaded_embeddings[index, :]
+                count += 1
+            self.logger.Log('Restored ' + str(count) + ' entities from checkpoint.')
+        
+        # restore entities
+        if i_remap is not None and 'item_embeddings.weight' in model_dict and 'item_embeddings.weight' in embedding_names:
+            loaded_embeddings = model_dict['item_embeddings.weight']
+            del (model_dict['item_embeddings.weight'])
+
+            count = 0
+            for index in i_remap:
+                mapped_index = i_remap[index]
+                self.model.item_embeddings.weight.data[mapped_index, :] = loaded_embeddings[index, :]
+                count += 1
+            self.logger.Log('Restored ' + str(count) + ' items from checkpoint.')
+
+        # 3. load the new state dict
+        self.model.load_state_dict(model_dict)
+
+        self.logger.info("Load Embeddings of {} from {}.".format(", ".join(list(pretrained_dict.keys())), filename))

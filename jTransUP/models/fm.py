@@ -22,6 +22,7 @@ class FM(nn.Module):
         self.embedding_size = embedding_size
         self.user_total = user_total
         self.item_total = item_total
+        self.is_pretrained = False
 
         # init user and item embeddings
         user_weight = torch.FloatTensor(self.user_total, self.embedding_size)

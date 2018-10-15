@@ -37,6 +37,7 @@ class jTransUPModel(nn.Module):
         self.item_total = item_total
         self.ent_total = entity_total
         self.rel_total = relation_total
+        self.is_pretrained = False
         # transup
         user_weight = torch.FloatTensor(self.user_total, self.embedding_size)
         nn.init.xavier_uniform(user_weight)

@@ -230,13 +230,13 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
                 if is_best:
                     log_str = ["Best performances in {} step!".format(trainer.best_step)]
-                    log_str += ["{} : {}.".format(s, str(f1_vis_dict[s])) for s in f1_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(p_vis_dict[s])) for s in p_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(r_vis_dict[s])) for s in r_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(hit_vis_dict[s])) for s in hit_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(ndcg_vis_dict[s])) for s in ndcg_vis_dict]
-                    log_str += ["{} : {}.".format(s, str(kg_hit_dict[s])) for s in kg_hit_dict]
-                    log_str += ["{} : {}.".format(s, str(meanrank_dict[s])) for s in meanrank_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % f1_vis_dict[s]) for s in f1_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % p_vis_dict[s]) for s in p_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % r_vis_dict[s]) for s in r_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % hit_vis_dict[s]) for s in hit_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % ndcg_vis_dict[s]) for s in ndcg_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % kg_hit_dict[s]) for s in kg_hit_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % meanrank_dict[s]) for s in meanrank_dict]
                     
                     vis.log("\n".join(log_str), win_name="Best Performances")
 
@@ -411,6 +411,9 @@ def run(only_forward=False):
     
     trainer = ModelTrainer(joint_model, logger, epoch_length, FLAGS)
 
+    if FLAGS.load_ckpt_file is not None:
+        trainer.loadEmbedding(FLAGS.load_ckpt_file, joint_model.state_dict(), e_remap=e_map, i_remap=i_map)
+    
     # Do an evaluation-only run.
     if only_forward:
         for i, eval_data in enumerate(rating_eval_datasets):

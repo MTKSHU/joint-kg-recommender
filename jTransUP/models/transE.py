@@ -26,6 +26,7 @@ class TransEModel(nn.Module):
         self.embedding_size = embedding_size
         self.ent_total = ent_total
         self.rel_total = rel_total
+        self.is_pretrained = False
 
         ent_weight = torch.FloatTensor(self.ent_total, self.embedding_size)
         rel_weight = torch.FloatTensor(self.rel_total, self.embedding_size)
