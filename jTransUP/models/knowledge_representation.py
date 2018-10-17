@@ -232,7 +232,7 @@ def run(only_forward=False):
     kg_path = os.path.join(os.path.join(FLAGS.data_path, FLAGS.dataset), 'kg')
     eval_files = FLAGS.kg_test_files.split(':')
 
-    train_dataset, eval_datasets, e_map, r_map = load_data(kg_path, eval_files, FLAGS.batch_size, logger=logger, negtive_samples=FLAGS.negtive_samples)
+    train_dataset, eval_datasets, e_map, r_map = load_data(kg_path, eval_files, FLAGS.kg_batch_size, logger=logger, negtive_samples=FLAGS.kg_negtive_samples)
 
     entity_total = len(e_map)
     relation_total = len(r_map)
@@ -240,11 +240,11 @@ def run(only_forward=False):
     train_iter, train_total, train_list, train_head_dict, train_tail_dict = train_dataset
 
     model = init_model(FLAGS, 0, 0, entity_total, relation_total, logger)
-    epoch_length = math.ceil( train_total / FLAGS.batch_size )
-    trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
+    epoch_length = math.ceil( train_total / FLAGS.kg_batch_size )
+    trainer = ModelTrainer(joint_model, logger, kg_epoch_length, FLAGS.model_type, FLAGS.kg_optimizer_type, FLAGS.kg_learning_rate, FLAGS.kg_l2_lambda, FLAGS.eval_interval_steps, FLAGS.ckpt_path, FLAGS.experiment_name)
 
-    if FLAGS.load_ckpt_file is not None:
-        trainer.loadEmbedding(FLAGS.load_ckpt_file, model.state_dict())
+    if FLAGS.kg_load_ckpt_file is not None:
+        trainer.loadEmbedding(FLAGS.kg_load_ckpt_file, model.state_dict())
 
     # Do an evaluation-only run.
     if only_forward:

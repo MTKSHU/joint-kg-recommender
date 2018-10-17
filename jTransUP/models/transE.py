@@ -8,7 +8,7 @@ from jTransUP.utils.misc import to_gpu
 def build_model(FLAGS, user_total, item_total, entity_total, relation_total):
     model_cls = TransEModel
     return model_cls(
-                L1_flag = FLAGS.L1_flag,
+                L1_flag = FLAGS.kg_L1_flag,
                 embedding_size = FLAGS.embedding_size,
                 ent_total = entity_total,
                 rel_total = relation_total

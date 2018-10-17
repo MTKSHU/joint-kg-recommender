@@ -16,40 +16,53 @@ import jTransUP.models.transE as transe
 import jTransUP.models.transR as transr
 import jTransUP.models.transD as transd
 import jTransUP.models.cofm as cofm
-import jTransUP.models.transUP_bias as transupb
 
 def get_flags():
     gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm", "transupb",
                                                 "transe", "transh", "transr", "transd", "cofm", "jtransup" ], "")
-    gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "including ratings.csv, r2kg.tsv and a kg dictionary containing kg_hop[0-9].dat")
+
+    gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "")
+
+    # rec parameter
+    gflags.DEFINE_float("rec_learning_rate", 0.005, "Used in optimizer.")
+    gflags.DEFINE_float("rec_l2_lambda", 1e-5, "")
+    gflags.DEFINE_integer("rec_negtive_samples", 1, ".")
+    gflags.DEFINE_enum("rec_optimizer_type", "Adagrad", ["Adam", "SGD", "Adagrad", "Rmsprop"], "")
+    gflags.DEFINE_integer("rec_batch_size", 512, "Minibatch size.")
+    gflags.DEFINE_integer("num_preferences", 20, "")
+    gflags.DEFINE_string("rec_test_files", None, "multiple filenames separated by ':'.")
+    gflags.DEFINE_string(
+        "rec_load_ckpt_file", None, "Where to load pretrained checkpoints.")
+
+    # kg parameter
+    gflags.DEFINE_float("kg_learning_rate", 0.001, "Used in optimizer.")
+    gflags.DEFINE_float("kg_l2_lambda", 0, "")
+    gflags.DEFINE_integer("kg_negtive_samples", 1, ".")
+    gflags.DEFINE_enum("kg_optimizer_type", "Adam", ["Adam", "SGD", "Adagrad", "Rmsprop"], "")
+    gflags.DEFINE_integer("kg_batch_size", 100, "Minibatch size.")
+    gflags.DEFINE_bool("share_embeddings", False, "")
+    gflags.DEFINE_string("kg_test_files", None, "multiple filenames separated by ':'.")
+    gflags.DEFINE_string(
+        "kg_load_ckpt_file", None, "Where to load pretrained checkpoints.")
+
+    # share parameter
     gflags.DEFINE_bool(
         "filter_wrong_corrupted",
         True,
         "If set to True, filter test samples from train and validations.")
-    gflags.DEFINE_bool(
-        "share_embeddings",
-        False,
-        "")
     gflags.DEFINE_integer("max_queue", 10, ".")
     gflags.DEFINE_integer("num_processes", 4, ".")
-
-    gflags.DEFINE_float("learning_rate", 0.001, "Used in optimizer.")
     gflags.DEFINE_integer(
         "early_stopping_steps_to_wait",
         70000,
         "How many times will lr decrease? If set to 0, it remains constant.")
+    gflags.DEFINE_integer("embedding_size", 64, ".")
+    gflags.DEFINE_float("learning_rate_decay_when_no_progress", 0.5,
+                        "Used in optimizer. Decay the LR by this much every epoch steps if a new best has not been set in the last epoch.")
     gflags.DEFINE_bool(
         "L1_flag",
         False,
         "If set to True, use L1 distance as dissimilarity; else, use L2.")
-    gflags.DEFINE_float("l2_lambda", 1e-5, "")
-    gflags.DEFINE_integer("embedding_size", 64, ".")
-    gflags.DEFINE_integer("negtive_samples", 1, ".")
-    gflags.DEFINE_integer("batch_size", 512, "Minibatch size.")
-    gflags.DEFINE_enum("optimizer_type", "Adagrad", ["Adam", "SGD", "Adagrad", "Rmsprop"], "")
-    gflags.DEFINE_float("learning_rate_decay_when_no_progress", 0.5,
-                        "Used in optimizer. Decay the LR by this much every epoch steps if a new best has not been set in the last epoch.")
-
     gflags.DEFINE_integer(
         "eval_interval_steps",
         14000,
@@ -63,21 +76,14 @@ def get_flags():
     gflags.DEFINE_float("momentum", 0.9, "The momentum of the optimizer.")
     gflags.DEFINE_integer("seed", 0, "Fix the random seed. Except for 0, which means no setting of random seed.")
     gflags.DEFINE_integer("topn", 10, "")
-    gflags.DEFINE_integer("num_preferences", 4, "")
     gflags.DEFINE_float("joint_ratio", 0.5, "(0 - 1). The train ratio of recommendation, kg is 1 - joint_ratio.")
 
     gflags.DEFINE_string("experiment_name", None, "")
     gflags.DEFINE_string("data_path", None, "")
-    gflags.DEFINE_string("rec_test_files", None, "multiple filenames separated by ':'.")
-    gflags.DEFINE_string("kg_test_files", None, "multiple filenames separated by ':'.")
     gflags.DEFINE_string("log_path", None, "")
     gflags.DEFINE_enum("log_level", "debug", ["debug", "info"], "")
     gflags.DEFINE_string(
         "ckpt_path", None, "Where to save/load checkpoints. If not set, the same as log_path")
-    
-    gflags.DEFINE_string(
-        "load_ckpt_file", None, "Where to load pretrained checkpoints.")
-
     gflags.DEFINE_boolean(
         "has_visualization",
         True,
@@ -86,9 +92,7 @@ def get_flags():
     gflags.DEFINE_boolean(
         "eval_only_mode",
         False,
-        "If set, a checkpoint is loaded and a forward pass is done to get the predicted candidates."
-        "Requirements: Must specify load_experiment_name.")
-    gflags.DEFINE_string("load_experiment_name", None, "")
+        "If set, a checkpoint is loaded and a forward pass is done to get the predicted candidates.")
 
 def flag_defaults(FLAGS):
 
@@ -108,9 +112,6 @@ def flag_defaults(FLAGS):
 
     if not FLAGS.ckpt_path:
         FLAGS.ckpt_path = FLAGS.log_path
-
-    if FLAGS.eval_only_mode and not FLAGS.load_experiment_name:
-        FLAGS.load_experiment_name = FLAGS.experiment_name
     
     if FLAGS.seed != 0:
         torch.manual_seed(FLAGS.seed)
@@ -127,8 +128,6 @@ def init_model(
     logger.info("Building model.")
     if FLAGS.model_type == "transup":
         build_model = transup.build_model
-    elif FLAGS.model_type == "transupb":
-        build_model = transupb.build_model
     elif FLAGS.model_type == "bprmf":
         build_model = bprmf.build_model
     elif FLAGS.model_type == "fm":

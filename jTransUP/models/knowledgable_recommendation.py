@@ -143,7 +143,7 @@ def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eva
 
     return avg_hit, avg_mean_rank
 
-def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset, rating_eval_datasets, triple_eval_datasets, e_map, i_map, ikg_map, logger, vis=None, show_sample=False):
+def train_loop(FLAGS, model, rec_trainer, kg_trainer, rating_train_dataset, triple_train_dataset, rating_eval_datasets, triple_eval_datasets, e_map, i_map, ikg_map, logger, vis=None, show_sample=False):
     rating_train_iter, rating_train_total, rating_train_list, rating_train_dict = rating_train_dataset
 
     triple_train_iter, triple_train_total, triple_train_list, head_train_dict, tail_train_dict = triple_train_dataset
@@ -160,27 +160,29 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
     item_total = len(i_map)
     entity_total = len(e_map)
-    step_to_switch = 10 * FLAGS.joint_ratio
+    step_to_switch = round(10 * FLAGS.joint_ratio ) % 10
 
     # Train.
     logger.info("Training.")
 
     # New Training Loop
     pbar = None
-    total_loss = 0.0
-    for _ in range(trainer.step, FLAGS.training_steps):
+    rec_total_loss = 0.0
+    kg_total_loss = 0.0
+    for _ in range(rec_trainer.step, FLAGS.training_steps):
 
-        if FLAGS.early_stopping_steps_to_wait > 0 and (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
+        if FLAGS.early_stopping_steps_to_wait > 0 and (rec_trainer.step - rec_trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
             logger.info('No improvement after ' +
                        str(FLAGS.early_stopping_steps_to_wait) +
                        ' steps. Stopping training.')
             if pbar is not None: pbar.close()
             break
-        if trainer.step % FLAGS.eval_interval_steps == 0:
+        if rec_trainer.step % FLAGS.eval_interval_steps == 0:
             if pbar is not None:
                 pbar.close()
-            total_loss /= FLAGS.eval_interval_steps
-            logger.info("train loss:{:.4f}!".format(total_loss))
+            rec_total_loss /= FLAGS.eval_interval_steps
+            kg_total_loss = kg_total_loss * step_to_switch / (FLAGS.eval_interval_steps * (10-step_to_switch))
+            logger.info("rec train loss:{:.4f}, kg train loss:{:.4f}!".format(rec_total_loss, kg_total_loss))
 
             rec_performances = []
             for i, eval_data in enumerate(rating_eval_datasets):
@@ -188,7 +190,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                 if FLAGS.filter_wrong_corrupted:
                     all_eval_dicts = [rating_train_dict] + [tmp_data[3] for j, tmp_data in enumerate(rating_eval_datasets) if j!=i]
 
-                rec_performances.append( evaluateRec(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, i_map, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
+                rec_performances.append( evaluateRec(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, i_map, logger, eval_descending=True if rec_trainer.model_target == 1 else False, show_sample=show_sample))
 
             kg_performances = []
             for i, eval_data in enumerate(triple_eval_datasets):
@@ -198,15 +200,16 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                     eval_head_dicts = [head_train_dict] + [tmp_data[4] for j, tmp_data in enumerate(triple_eval_datasets) if j!=i]
                     eval_tail_dicts = [tail_train_dict] + [tmp_data[5] for j, tmp_data in enumerate(triple_eval_datasets) if j!=i]
 
-                kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
+                kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=True if kg_trainer.model_target == 1 else False, show_sample=show_sample))
 
-            is_best = trainer.new_performance(rec_performances[0], rec_performances)
+            performances = (rec_performances, kg_performances)
+            is_best = rec_trainer.new_performance(rec_performances[0], performances)
 
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
             # visuliazation
             if vis is not None:
-                vis.plot_many_stack({'Train Loss': total_loss},
+                vis.plot_many_stack({'Rec Train Loss': rec_total_loss, 'KG Train Loss':kg_total_loss},
                 win_name="Loss Curve")
                 f1_dict = {}
                 p_dict = {}
@@ -227,7 +230,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                     meanrank_dict['KG Eval {} MeanRank'.format(i)] = performance[1]
 
                 if is_best:
-                    log_str = ["Best performances in {} step!".format(trainer.best_step)]
+                    log_str = ["Best performances in {} step!".format(rec_trainer.best_step)]
                     log_str += ["{} : {}.".format(s, "%.5f" % f1_dict[s]) for s in f1_dict]
                     log_str += ["{} : {}.".format(s, "%.5f" % p_dict[s]) for s in p_dict]
                     log_str += ["{} : {}.".format(s, "%.5f" % r_dict[s]) for s in r_dict]
@@ -252,78 +255,33 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
                 vis.plot_many_stack(meanrank_dict, win_name="KG MeanRank")
 
-            total_loss = 0.0
+            rec_total_loss = 0.0
+            kg_total_loss = 0.0
         # recommendation train
-        if trainer.step % 10 < step_to_switch :
-            rating_batch = next(rating_train_iter)
-            u, pi, ni = getNegRatings(rating_batch, item_total, all_dicts=all_rating_dicts)
+        rating_batch = next(rating_train_iter)
+        u, pi, ni = getNegRatings(rating_batch, item_total, all_dicts=all_rating_dicts)
 
-            e_ids, i_ids = getMappedEntities(pi+ni, i_map, ikg_map)
+        e_ids, i_ids = getMappedEntities(pi+ni, i_map, ikg_map)
 
-            if FLAGS.share_embeddings:
-                ni = [i_map[i] for i in ni]
-                pi = [i_map[i] for i in pi]
+        if FLAGS.share_embeddings:
+            ni = [i_map[i] for i in ni]
+            pi = [i_map[i] for i in pi]
 
-            u_var = to_gpu(V(torch.LongTensor(u)))
-            pi_var = to_gpu(V(torch.LongTensor(pi)))
-            ni_var = to_gpu(V(torch.LongTensor(ni)))
+        u_var = to_gpu(V(torch.LongTensor(u)))
+        pi_var = to_gpu(V(torch.LongTensor(pi)))
+        ni_var = to_gpu(V(torch.LongTensor(ni)))
 
-            # set model in training mode
-            model.train()
+        # set model in training mode
+        model.train()
 
-            trainer.optimizer_zero_grad()
+        rec_trainer.optimizer_zero_grad()
 
-            # Run model. output: batch_size * cand_num, input: ratings, triples, is_rec=True
-            pos_score = model( (u_var, pi_var), None, is_rec=True)
-            neg_score = model( (u_var, ni_var), None, is_rec=True)
+        # Run model. output: batch_size * cand_num, input: ratings, triples, is_rec=True
+        pos_score = model( (u_var, pi_var), None, is_rec=True)
+        neg_score = model( (u_var, ni_var), None, is_rec=True)
 
-            # Calculate loss.
-            losses = bprLoss(pos_score, neg_score, target=trainer.model_target)
-            
-            if FLAGS.model_type == "transup":
-                losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight)
-
-        # kg train
-        else :
-            triple_batch = next(triple_train_iter)
-            ph, pt, pr, nh, nt, nr = getTrainTripleBatch(triple_batch, entity_total, all_head_dicts=all_head_dicts, all_tail_dicts=all_tail_dicts)
-
-            e_ids, i_ids = getMappedItems(ph+pt+nh+nt, e_map, ikg_map)
-
-            if FLAGS.share_embeddings:
-                ph = [e_map[e] for e in ph]
-                pt = [e_map[e] for e in pt]
-                nh = [e_map[e] for e in nh]
-                nt = [e_map[e] for e in nt]
-
-            ph_var = to_gpu(V(torch.LongTensor(ph)))
-            pt_var = to_gpu(V(torch.LongTensor(pt)))
-            pr_var = to_gpu(V(torch.LongTensor(pr)))
-            nh_var = to_gpu(V(torch.LongTensor(nh)))
-            nt_var = to_gpu(V(torch.LongTensor(nt)))
-            nr_var = to_gpu(V(torch.LongTensor(nr)))
-
-            # set model in training mode
-            model.train()
-
-            trainer.optimizer_zero_grad()
-
-            # Run model. output: batch_size * cand_nu, input: ratings, triples, is_rec=True
-            pos_score = model(None, (ph_var, pt_var, pr_var), is_rec=False)
-            neg_score = model(None, (nh_var, nt_var, nr_var), is_rec=False)
-
-            # Calculate loss.
-            # losses = nn.MarginRankingLoss(margin=FLAGS.margin).forward(pos_score, neg_score, to_gpu(torch.autograd.Variable(torch.FloatTensor([trainer.model_target]*len(ph)))))
-
-            losses = loss.marginLoss()(pos_score, neg_score, FLAGS.margin)
-            
-            ent_embeddings = model.ent_embeddings(torch.cat([ph_var, pt_var, nh_var, nt_var]))
-            rel_embeddings = model.rel_embeddings(torch.cat([pr_var, nr_var]))
-            if FLAGS.model_type == "jtransup":
-                norm_embeddings = model.norm_embeddings(torch.cat([pr_var, nr_var]))
-                losses += loss.orthogonalLoss(rel_embeddings, norm_embeddings)
-
-            losses = losses + loss.normLoss(ent_embeddings) + loss.normLoss(rel_embeddings)
+        # Calculate loss.
+        losses = bprLoss(pos_score, neg_score, target=rec_trainer.model_target)
         
         # align loss if not share embeddings
         if not FLAGS.share_embeddings:
@@ -332,18 +290,67 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             ent_embeddings = model.ent_embeddings(e_var)
             item_embeddings = model.item_embeddings(i_var)
             losses += loss.pNormLoss(ent_embeddings, item_embeddings, L1_flag=FLAGS.L1_flag)
-
         # Backward pass.
         losses.backward()
-
-        # for param in model.parameters():
-        #     print(param.grad.data.sum())
         # Hard Gradient Clipping
         nn.utils.clip_grad_norm([param for name, param in model.named_parameters()], FLAGS.clipping_max_value)
-
         # Gradient descent step.
-        trainer.optimizer_step()
-        total_loss += losses.data[0]
+        rec_trainer.optimizer_step()
+        rec_total_loss += losses.data[0]
+
+        # kg train
+        if rec_trainer.step % 10 == step_to_switch :
+            for _ in range(10-step_to_switch):
+                triple_batch = next(triple_train_iter)
+                ph, pt, pr, nh, nt, nr = getTrainTripleBatch(triple_batch, entity_total, all_head_dicts=all_head_dicts, all_tail_dicts=all_tail_dicts)
+
+                e_ids, i_ids = getMappedItems(ph+pt+nh+nt, e_map, ikg_map)
+
+                if FLAGS.share_embeddings:
+                    ph = [e_map[e] for e in ph]
+                    pt = [e_map[e] for e in pt]
+                    nh = [e_map[e] for e in nh]
+                    nt = [e_map[e] for e in nt]
+
+                ph_var = to_gpu(V(torch.LongTensor(ph)))
+                pt_var = to_gpu(V(torch.LongTensor(pt)))
+                pr_var = to_gpu(V(torch.LongTensor(pr)))
+                nh_var = to_gpu(V(torch.LongTensor(nh)))
+                nt_var = to_gpu(V(torch.LongTensor(nt)))
+                nr_var = to_gpu(V(torch.LongTensor(nr)))
+
+                # set model in training mode
+                model.train()
+
+                kg_trainer.optimizer_zero_grad()
+
+                # Run model. output: batch_size * cand_nu, input: ratings, triples, is_rec=True
+                pos_score = model(None, (ph_var, pt_var, pr_var), is_rec=False)
+                neg_score = model(None, (nh_var, nt_var, nr_var), is_rec=False)
+
+                # Calculate loss.
+                # losses = nn.MarginRankingLoss(margin=FLAGS.margin).forward(pos_score, neg_score, to_gpu(torch.autograd.Variable(torch.FloatTensor([kg_trainer.model_target]*len(ph)))))
+                losses = loss.marginLoss()(pos_score, neg_score, FLAGS.margin)
+                ent_embeddings = model.ent_embeddings(torch.cat([ph_var, pt_var, nh_var, nt_var]))
+                rel_embeddings = model.rel_embeddings(torch.cat([pr_var, nr_var]))
+                if FLAGS.model_type == "jtransup":
+                    norm_embeddings = model.norm_embeddings(torch.cat([pr_var, nr_var]))
+                    losses += loss.orthogonalLoss(rel_embeddings, norm_embeddings)
+                losses = losses + loss.normLoss(ent_embeddings) + loss.normLoss(rel_embeddings)
+                # align loss if not share embeddings
+                if not FLAGS.share_embeddings:
+                    e_var = to_gpu(V(torch.LongTensor(e_ids)))
+                    i_var = to_gpu(V(torch.LongTensor(i_ids)))
+                    ent_embeddings = model.ent_embeddings(e_var)
+                    item_embeddings = model.item_embeddings(i_var)
+                    losses += loss.pNormLoss(ent_embeddings, item_embeddings, L1_flag=FLAGS.L1_flag)
+                # Backward pass.
+                losses.backward()
+                # Hard Gradient Clipping
+                nn.utils.clip_grad_norm([param for name, param in model.named_parameters()], FLAGS.clipping_max_value)
+                # Gradient descent step.
+                kg_trainer.optimizer_step()
+                kg_total_loss += losses.data[0]
         pbar.update(1)
     
 
@@ -386,7 +393,7 @@ def run(only_forward=False):
     if FLAGS.kg_test_files is not None:
         kg_eval_files = FLAGS.kg_test_files.split(':')
 
-    rating_train_dataset, rating_eval_datasets, u_map, i_map, triple_train_dataset, triple_eval_datasets, e_map, r_map, ikg_map = load_data(dataset_path, rec_eval_files, kg_eval_files, FLAGS.batch_size, negtive_samples=FLAGS.negtive_samples, logger=logger)
+    rating_train_dataset, rating_eval_datasets, u_map, i_map, triple_train_dataset, triple_eval_datasets, e_map, r_map, ikg_map = load_data(dataset_path, rec_eval_files, kg_eval_files, FLAGS.rec_batch_size, FLAGS.kg_batch_size, rec_negtive_samples=FLAGS.rec_negtive_samples, kg_negtive_samples=FLAGS.kg_negtive_samples, logger=logger)
 
     rating_train_iter, rating_train_total, rating_train_list, rating_train_dict = rating_train_dataset
 
@@ -404,14 +411,18 @@ def run(only_forward=False):
     joint_model = init_model(FLAGS, user_total, item_total, entity_total, relation_total, logger)
 
     # epoch_length = math.ceil( (triple_train_total+rating_train_total) / FLAGS.batch_size )
-    epoch_length = math.ceil( float(rating_train_total) / FLAGS.joint_ratio / FLAGS.batch_size )
+    rec_epoch_length = math.ceil( float(rating_train_total) / FLAGS.rec_batch_size )
+    kg_epoch_length = math.ceil( float(triple_train_total) / FLAGS.kg_batch_size )
     
-    trainer = ModelTrainer(joint_model, logger, epoch_length, FLAGS)
+    rec_trainer = ModelTrainer(joint_model, logger, rec_epoch_length, FLAGS.model_type, FLAGS.rec_optimizer_type, FLAGS.rec_learning_rate, FLAGS.rec_l2_lambda, FLAGS.eval_interval_steps, FLAGS.ckpt_path, FLAGS.experiment_name)
 
-    if FLAGS.load_ckpt_file is not None and FLAGS.share_embeddings:
-        trainer.loadEmbedding(FLAGS.load_ckpt_file, joint_model.state_dict(), e_remap=e_map, i_remap=i_map)
-    elif FLAGS.load_ckpt_file is not None:
-        trainer.loadEmbedding(FLAGS.load_ckpt_file, joint_model.state_dict())
+    kg_trainer = ModelTrainer(joint_model, logger, kg_epoch_length, FLAGS.model_type, FLAGS.kg_optimizer_type, FLAGS.kg_learning_rate, FLAGS.kg_l2_lambda, FLAGS.eval_interval_steps, FLAGS.ckpt_path, FLAGS.experiment_name)
+
+    if FLAGS.rec_load_ckpt_file is not None:
+        rec_trainer.loadEmbedding(FLAGS.rec_load_ckpt_file, set(['user_embeddings.weight','item_embeddings.weight']), e_remap=e_map if FLAGS.share_embeddings else None, i_remap=i_map if FLAGS.share_embeddings else None)
+    
+    if FLAGS.kg_load_ckpt_file is not None:
+        kg_trainer.loadEmbedding(FLAGS.kg_load_ckpt_file, set(['ent_embeddings.weight','rel_embeddings.weight', 'norm_embeddings.weight']), e_remap=e_map if FLAGS.share_embeddings else None, i_remap=i_map if FLAGS.share_embeddings else None)
     
     # Do an evaluation-only run.
     if only_forward:
@@ -427,7 +438,7 @@ def run(only_forward=False):
                 all_dicts,
                 i_map,
                 logger,
-                eval_descending=True if trainer.model_target == 1 else False,
+                eval_descending=True if rec_trainer.model_target == 1 else False,
                 show_sample=False)
         # head_iter, tail_iter, eval_total, eval_list, eval_head_dict, eval_tail_dict
         for i, eval_data in enumerate(triple_eval_datasets):
@@ -447,13 +458,14 @@ def run(only_forward=False):
                 all_tail_dicts,
                 e_map,
                 logger,
-                eval_descending=True if trainer.model_target == 1 else False,
+                eval_descending=True if kg_trainer.model_target == 1 else False,
                 show_sample=False)
     else:
         train_loop(
             FLAGS,
             joint_model,
-            trainer,
+            rec_trainer,
+            kg_trainer,
             rating_train_dataset,
             triple_train_dataset,
             rating_eval_datasets,
