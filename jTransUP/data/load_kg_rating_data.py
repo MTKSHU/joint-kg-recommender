@@ -48,13 +48,13 @@ def rebuildEntityItemVocab(map1, map2, links):
     return new_map, remap1, remap2, len(has_map2)
             
 
-def load_data(data_path, rec_eval_files, kg_eval_files, rec_batch_size, kg_batch_size, rec_negtive_samples=1, kg_negtive_samples=1, logger=None):
+def load_data(data_path, rec_eval_files, kg_eval_files, batch_size, negtive_samples=1, logger=None):
     kg_path = os.path.join(data_path, 'kg')
     map_file = os.path.join(data_path, 'i2kg_map.tsv')
 
-    rating_train_dataset, rating_eval_datasets, u_map, i_map = load_rating_data.load_data(data_path, rec_eval_files, rec_batch_size, logger=logger, negtive_samples=rec_negtive_samples)
+    rating_train_dataset, rating_eval_datasets, u_map, i_map = load_rating_data.load_data(data_path, rec_eval_files, batch_size, logger=logger, negtive_samples=negtive_samples)
 
-    triple_train_dataset, triple_eval_datasets, e_map, r_map = load_triple_data.load_data(kg_path, kg_eval_files, kg_batch_size, logger=logger, negtive_samples=kg_negtive_samples)
+    triple_train_dataset, triple_eval_datasets, e_map, r_map = load_triple_data.load_data(kg_path, kg_eval_files, batch_size, logger=logger, negtive_samples=negtive_samples)
 
     i2kg_map, kg2i_map = loadR2KgMap(map_file)
     ikg_map, e_remap, i_remap, aligned_ie_total = rebuildEntityItemVocab(e_map, i_map, kg2i_map)

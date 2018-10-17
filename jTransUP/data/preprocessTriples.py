@@ -115,8 +115,6 @@ def parseRT(json_dict, ent_set=None, rel_set=None):
      ( ent_set is not None and t not in ent_set ) or \
      ( rel_set is not None and r not in rel_set ) :
         return None
-    if rel_set is not None and r in rel_set:
-        r = rel_set[r]
     return r, t
 
 def parseHR(json_dict, ent_set=None, rel_set=None):
@@ -125,8 +123,6 @@ def parseHR(json_dict, ent_set=None, rel_set=None):
     if  (ent_set is not None and h not in ent_set) or \
      ( rel_set is not None and r not in rel_set ) :
         return None
-    if rel_set is not None and r in rel_set:
-        r = rel_set[r]
     return h, r
 
 def loadRawData(filename, ent_vocab=None, rel_vocab=None, triple_list=[], ent_dic={}, logger=None):
@@ -225,18 +221,13 @@ def preprocess(triple_files, out_path, entity_file=None, relation_file=None, tra
         logger.info("{} {} for {:.1f} training, {:.1f} validation and {:.1f} testing!".format( str_is_shuffle, file_str, train_ratio, 1-train_ratio-test_ratio, test_ratio ))
     
     # predifined vocab for filtering
-    # each line may have multiple relations
     ent_keep_vocab = None
     rel_vocab = None
-    
     if relation_file is not None and os.path.exists(relation_file):
-        rel_vocab = {}
+        rel_vocab = set()
         with open(relation_file, 'r', encoding='utf-8') as fin:
             for line in fin:
-                line_split = line.strip().split('\t')
-                rel_vocab[line_split[0]] = line_split[0]
-                for rel in line_split[1:]:
-                    rel_vocab[rel] = line_split[0]
+                rel_vocab.add(line.strip())
     
     if entity_file is not None and os.path.exists(entity_file):
         ent_keep_vocab = set()

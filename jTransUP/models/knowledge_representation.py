@@ -123,7 +123,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                     eval_head_dicts = [train_head_dict] + [tmp_data[4] for j, tmp_data in enumerate(eval_datasets) if j!=i]
                     eval_tail_dicts = [train_tail_dict] + [tmp_data[5] for j, tmp_data in enumerate(eval_datasets) if j!=i]
 
-                performances.append( evaluate(FLAGS, model, entity_total, relation_total, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
+                performances.append( evaluate(FLAGS, model, entity_total, relation_total, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, logger, eval_descending=False, show_sample=show_sample))
 
             is_best = trainer.new_performance(performances[0], performances)
 
@@ -232,7 +232,7 @@ def run(only_forward=False):
     kg_path = os.path.join(os.path.join(FLAGS.data_path, FLAGS.dataset), 'kg')
     eval_files = FLAGS.kg_test_files.split(':')
 
-    train_dataset, eval_datasets, e_map, r_map = load_data(kg_path, eval_files, FLAGS.kg_batch_size, logger=logger, negtive_samples=FLAGS.kg_negtive_samples)
+    train_dataset, eval_datasets, e_map, r_map = load_data(kg_path, eval_files, FLAGS.batch_size, logger=logger, negtive_samples=FLAGS.negtive_samples)
 
     entity_total = len(e_map)
     relation_total = len(r_map)
@@ -240,11 +240,11 @@ def run(only_forward=False):
     train_iter, train_total, train_list, train_head_dict, train_tail_dict = train_dataset
 
     model = init_model(FLAGS, 0, 0, entity_total, relation_total, logger)
-    epoch_length = math.ceil( train_total / FLAGS.kg_batch_size )
-    trainer = ModelTrainer(joint_model, logger, kg_epoch_length, FLAGS.model_type, FLAGS.kg_optimizer_type, FLAGS.kg_learning_rate, FLAGS.kg_l2_lambda, FLAGS.eval_interval_steps, FLAGS.ckpt_path, FLAGS.experiment_name)
+    epoch_length = math.ceil( train_total / FLAGS.batch_size )
+    trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
 
-    if FLAGS.kg_load_ckpt_file is not None:
-        trainer.loadEmbedding(FLAGS.kg_load_ckpt_file, model.state_dict())
+    if FLAGS.load_ckpt_file is not None:
+        trainer.loadEmbedding(FLAGS.load_ckpt_file, model.state_dict())
 
     # Do an evaluation-only run.
     if only_forward:
@@ -267,7 +267,7 @@ def run(only_forward=False):
                 all_head_dicts,
                 all_tail_dicts,
                 logger,
-                eval_descending=True if trainer.model_target == 1 else False,
+                eval_descending=False,
                 show_sample=False)
     else:
         train_loop(

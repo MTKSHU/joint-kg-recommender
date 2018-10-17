@@ -4,35 +4,35 @@ import torch.optim as optim
 import os
 from jTransUP.utils.misc import to_gpu, recursively_set_device, USE_CUDA
 
-def get_checkpoint_path(ckpt_path, experiment_name, suffix=".ckpt"):
+def get_checkpoint_path(FLAGS, suffix=".ckpt"):
     # Set checkpoint path.
-    if ckpt_path.endswith(".ckpt"):
-        checkpoint_path = ckpt_path
+    if FLAGS.ckpt_path.endswith(".ckpt"):
+        checkpoint_path = FLAGS.ckpt_path
     else:
-        checkpoint_path = os.path.join(ckpt_path, experiment_name + suffix)
+        checkpoint_path = os.path.join(FLAGS.ckpt_path, FLAGS.experiment_name + suffix)
     return checkpoint_path
 
 def get_model_target(model_type):
-    target = 1 if model_type == "bprmf" else -1
+    target = 1 if model_type in ["bprmf", "cofm", "fm"] else -1
     return target
 
 check_rho = 1.0
 class ModelTrainer(object):
-    def __init__(self, model, logger, epoch_length, model_type, optimizer_type, learning_rate, l2_lambda, eval_interval_steps, ckpt_path, experiment_name, learning_rate_decay_when_no_progress=0.5, momentum=0.9, eval_only_mode=False):
+    def __init__(self, model, logger, epoch_length, FLAGS):
         self.model = model
         self.logger = logger
         self.epoch_length = epoch_length
-        self.model_target = get_model_target(model_type)
+        self.model_target = get_model_target(FLAGS.model_type)
 
         self.logger.info('One epoch is ' + str(self.epoch_length) + ' steps.')
 
         self.parameters = [param for name, param in model.named_parameters()]
-        self.optimizer_type = optimizer_type
+        self.optimizer_type = FLAGS.optimizer_type
 
-        self.l2_lambda = l2_lambda
-        self.learning_rate_decay_when_no_progress = learning_rate_decay_when_no_progress
-        self.momentum = momentum
-        self.eval_interval_steps = eval_interval_steps
+        self.l2_lambda = FLAGS.l2_lambda
+        self.learning_rate_decay_when_no_progress = FLAGS.learning_rate_decay_when_no_progress
+        self.momentum = FLAGS.momentum
+        self.eval_interval_steps = FLAGS.eval_interval_steps
 
         self.step = 0
         self.best_step = 0
@@ -44,12 +44,12 @@ class ModelTrainer(object):
         # GPU support.
         to_gpu(model)
 
-        self.optimizer_reset(learning_rate)
+        self.optimizer_reset(FLAGS.learning_rate)
 
-        self.checkpoint_path = get_checkpoint_path(ckpt_path, experiment_name)
+        self.checkpoint_path = get_checkpoint_path(FLAGS)
 
         # Load checkpoint if available.
-        if eval_only_mode and os.path.isfile(self.checkpoint_path):
+        if FLAGS.eval_only_mode and os.path.isfile(self.checkpoint_path):
             self.logger.info("Found checkpoint, restoring.")
             self.load(self.checkpoint_path)
             self.logger.info(

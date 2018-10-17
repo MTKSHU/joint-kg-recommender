@@ -146,8 +146,10 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
         # Calculate loss.
         losses = bprLoss(pos_score, neg_score, target=trainer.model_target)
         
-        if FLAGS.model_type == "transup":
-            losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight)
+        if FLAGS.model_type in ["transup","transupb"]:
+            user_embeddings = model.user_embeddings(u_var)
+            item_embeddings = model.item_embeddings(torch.cat([pi_var, ni_var]))
+            losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight) + normLoss(user_embeddings) + normLoss(item_embeddings) + normLoss(model.pref_embeddings.weight)
 
         # Backward pass.
         losses.backward()
@@ -197,7 +199,7 @@ def run(only_forward=False):
     dataset_path = os.path.join(FLAGS.data_path, FLAGS.dataset)
     eval_files = FLAGS.rec_test_files.split(':')
 
-    train_dataset, eval_datasets, u_map, i_map = load_data(dataset_path, eval_files, FLAGS.rec_batch_size, logger=logger, negtive_samples=FLAGS.rec_negtive_samples)
+    train_dataset, eval_datasets, u_map, i_map = load_data(dataset_path, eval_files, FLAGS.batch_size, logger=logger, negtive_samples=FLAGS.negtive_samples)
 
     train_iter, train_total, train_list, train_dict = train_dataset
 
@@ -205,11 +207,10 @@ def run(only_forward=False):
     item_total = len(i_map)
 
     model = init_model(FLAGS, user_total, item_total, 0, 0, logger)
-    epoch_length = math.ceil( train_total / FLAGS.rec_batch_size )
-    trainer = ModelTrainer(joint_model, logger, rec_epoch_length, FLAGS.model_type, FLAGS.rec_optimizer_type, FLAGS.rec_learning_rate, FLAGS.rec_l2_lambda, FLAGS.eval_interval_steps, FLAGS.ckpt_path, FLAGS.experiment_name)
-
-    if FLAGS.rec_load_ckpt_file is not None:
-        trainer.loadEmbedding(FLAGS.rec_load_ckpt_file, model.state_dict(), cpu=not USE_CUDA)
+    epoch_length = math.ceil( train_total / FLAGS.batch_size )
+    trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
+    if FLAGS.load_ckpt_file is not None:
+        trainer.loadEmbedding(FLAGS.load_ckpt_file, model.state_dict(), cpu=not USE_CUDA)
 
     # Do an evaluation-only run.
     if only_forward:

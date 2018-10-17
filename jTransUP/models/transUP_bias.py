@@ -86,12 +86,12 @@ class BTransUPModel(nn.Module):
         proj_u_e = projection_transH_pytorch(u_e, norm)
         proj_i_e = projection_transH_pytorch(i_e, norm)
 
-        i_b = self.item_bias(i_ids).squeeze()
+        u_b = self.user_bias(u_ids).squeeze()
 
         if self.L1_flag:
-            score = torch.abs(i_b - torch.sum(torch.abs(proj_u_e + r_e - proj_i_e), 1))
+            score = torch.abs(u_b - torch.sum(torch.abs(proj_u_e + r_e - proj_i_e), 1))
         else:
-            score = torch.abs(i_b - torch.sum((proj_u_e + r_e - proj_i_e) ** 2, 1))
+            score = torch.abs(u_b - torch.sum((proj_u_e + r_e - proj_i_e) ** 2, 1))
         return score
     
     def evaluate(self, u_ids):
@@ -111,11 +111,11 @@ class BTransUPModel(nn.Module):
         proj_u_e = projection_transH_pytorch(u_e, norm)
         proj_i_e = projection_transH_pytorch(i_e, norm)
 
-        i_b = self.item_bias.weight.squeeze().expand(batch_size, self.item_total)
+        u_b = self.user_bias(u_ids).expand(self.item_total, batch_size).permute(1, 0)
 
         # batch * item
         if self.L1_flag:
-            score = torch.abs(i_b - torch.sum(torch.abs(proj_u_e + r_e - proj_i_e), 2))
+            score = torch.abs(u_b - torch.sum(torch.abs(proj_u_e + r_e - proj_i_e), 2))
         else:
-            score = torch.abs(i_b - torch.sum((proj_u_e + r_e - proj_i_e) ** 2, 2))
+            score = torch.abs(u_b - torch.sum((proj_u_e + r_e - proj_i_e) ** 2, 2))
         return score
