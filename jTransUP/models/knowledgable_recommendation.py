@@ -168,8 +168,6 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
     # New Training Loop
     pbar = None
     total_loss = 0.0
-    pbar = tqdm(total=FLAGS.eval_interval_steps)
-    pbar.set_description("Training")
     for _ in range(trainer.step, FLAGS.training_steps):
 
         if FLAGS.early_stopping_steps_to_wait > 0 and (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
@@ -178,7 +176,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                        ' steps. Stopping training.')
             if pbar is not None: pbar.close()
             break
-        if trainer.step > 0 and trainer.step % FLAGS.eval_interval_steps == 0:
+        if trainer.step % FLAGS.eval_interval_steps == 0:
             if pbar is not None:
                 pbar.close()
             total_loss /= FLAGS.eval_interval_steps
@@ -230,11 +228,11 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
                 if is_best:
                     log_str = ["Best performances in {} step!".format(trainer.best_step)]
-                    log_str += ["{} : {}.".format(s, "%.5f" % f1_vis_dict[s]) for s in f1_vis_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % p_vis_dict[s]) for s in p_vis_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % r_vis_dict[s]) for s in r_vis_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % hit_vis_dict[s]) for s in hit_vis_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % ndcg_vis_dict[s]) for s in ndcg_vis_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % f1_dict[s]) for s in f1_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % p_dict[s]) for s in p_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % r_dict[s]) for s in r_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % rec_hit_dict[s]) for s in rec_hit_dict]
+                    log_str += ["{} : {}.".format(s, "%.5f" % ndcg_dict[s]) for s in ndcg_dict]
                     log_str += ["{} : {}.".format(s, "%.5f" % kg_hit_dict[s]) for s in kg_hit_dict]
                     log_str += ["{} : {}.".format(s, "%.5f" % meanrank_dict[s]) for s in meanrank_dict]
                     
@@ -340,7 +338,6 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
         # for param in model.parameters():
         #     print(param.grad.data.sum())
-
         # Hard Gradient Clipping
         nn.utils.clip_grad_norm([param for name, param in model.named_parameters()], FLAGS.clipping_max_value)
 
@@ -411,8 +408,10 @@ def run(only_forward=False):
     
     trainer = ModelTrainer(joint_model, logger, epoch_length, FLAGS)
 
-    if FLAGS.load_ckpt_file is not None:
+    if FLAGS.load_ckpt_file is not None and FLAGS.share_embeddings:
         trainer.loadEmbedding(FLAGS.load_ckpt_file, joint_model.state_dict(), e_remap=e_map, i_remap=i_map)
+    elif FLAGS.load_ckpt_file is not None:
+        trainer.loadEmbedding(FLAGS.load_ckpt_file, joint_model.state_dict())
     
     # Do an evaluation-only run.
     if only_forward:

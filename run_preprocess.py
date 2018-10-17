@@ -4,7 +4,7 @@ import os
 import logging
 
 data_path = "/Users/caoyixin/Github/joint-kg-recommender/datasets/"
-dataset = 'dbbook2014'
+dataset = 'ml1m'
 
 dataset_path = os.path.join(data_path, dataset)
 kg_path = os.path.join(dataset_path, 'kg')
@@ -32,6 +32,6 @@ stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 
-preprocessRating(rating_file, dataset_path, low_frequence=5, logger=logger)
+# preprocessRating(rating_file, dataset_path, low_frequence=5, logger=logger)
 
 preprocessKG([triple_file], kg_path, entity_file=i2kg_file, relation_file=relation_file, logger=logger)

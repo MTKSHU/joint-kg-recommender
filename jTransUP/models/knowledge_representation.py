@@ -137,7 +137,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                 meanrank_vis_dict = {}
                 for i, performance in enumerate(performances):
                     hit_vis_dict['Eval {} Hit'.format(i)] = performance[0]
-                    meanrank_vis_dict['Eval {} Hit'.format(i)] = performance[1]
+                    meanrank_vis_dict['Eval {} MeanRank'.format(i)] = performance[1]
                 
                 if is_best:
                     log_str = ["Best performances in {} step!".format(trainer.best_step)]

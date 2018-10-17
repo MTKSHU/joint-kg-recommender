@@ -171,7 +171,7 @@ class ModelTrainer(object):
                 mapped_index = e_remap[index]
                 self.model.ent_embeddings.weight.data[mapped_index, :] = loaded_embeddings[index, :]
                 count += 1
-            self.logger.Log('Restored ' + str(count) + ' entities from checkpoint.')
+            self.logger.info('Restored ' + str(count) + ' entities from checkpoint.')
         
         # restore entities
         if i_remap is not None and 'item_embeddings.weight' in model_dict and 'item_embeddings.weight' in embedding_names:
@@ -183,9 +183,9 @@ class ModelTrainer(object):
                 mapped_index = i_remap[index]
                 self.model.item_embeddings.weight.data[mapped_index, :] = loaded_embeddings[index, :]
                 count += 1
-            self.logger.Log('Restored ' + str(count) + ' items from checkpoint.')
+            self.logger.info('Restored ' + str(count) + ' items from checkpoint.')
 
         # 3. load the new state dict
-        self.model.load_state_dict(model_dict)
+        self.model.load_state_dict(model_dict, strict=False)
 
         self.logger.info("Load Embeddings of {} from {}.".format(", ".join(list(pretrained_dict.keys())), filename))

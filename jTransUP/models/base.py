@@ -16,9 +16,10 @@ import jTransUP.models.transE as transe
 import jTransUP.models.transR as transr
 import jTransUP.models.transD as transd
 import jTransUP.models.cofm as cofm
+import jTransUP.models.transUP_bias as transupb
 
 def get_flags():
-    gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm",
+    gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm", "transupb",
                                                 "transe", "transh", "transr", "transd", "cofm", "jtransup" ], "")
     gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "including ratings.csv, r2kg.tsv and a kg dictionary containing kg_hop[0-9].dat")
     gflags.DEFINE_bool(
@@ -126,6 +127,8 @@ def init_model(
     logger.info("Building model.")
     if FLAGS.model_type == "transup":
         build_model = transup.build_model
+    elif FLAGS.model_type == "transupb":
+        build_model = transupb.build_model
     elif FLAGS.model_type == "bprmf":
         build_model = bprmf.build_model
     elif FLAGS.model_type == "fm":

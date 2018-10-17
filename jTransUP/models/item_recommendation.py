@@ -147,9 +147,10 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
         losses = bprLoss(pos_score, neg_score, target=trainer.model_target)
         
         if FLAGS.model_type == "transup":
-            user_embeddings = model.user_embeddings(u_var)
-            item_embeddings = model.item_embeddings(torch.cat([pi_var, ni_var]))
-            losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight) + normLoss(user_embeddings) + normLoss(item_embeddings) + normLoss(model.pref_embeddings.weight)
+            # user_embeddings = model.user_embeddings(u_var)
+            # item_embeddings = model.item_embeddings(torch.cat([pi_var, ni_var]))
+            losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight)
+            # normLoss(user_embeddings) + normLoss(item_embeddings) + normLoss(model.pref_embeddings.weight)
 
         # Backward pass.
         losses.backward()
