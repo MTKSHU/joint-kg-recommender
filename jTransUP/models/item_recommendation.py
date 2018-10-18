@@ -106,46 +106,47 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
 
                 performances.append( evaluate(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, is_report=is_report))
 
-            is_best = trainer.new_performance(performances[0], performances)
-
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
-            # visuliazation
-            if vis is not None:
-                vis.plot_many_stack({'Train Loss': total_loss},
-                win_name="Loss Curve")
-                f1_vis_dict = {}
-                p_vis_dict = {}
-                r_vis_dict = {}
-                hit_vis_dict = {}
-                ndcg_vis_dict = {}
-                for i, performance in enumerate(performances):
-                    f1_vis_dict['Eval {} F1'.format(i)] = performance[0]
-                    p_vis_dict['Eval {} Precision'.format(i)] = performance[1]
-                    r_vis_dict['Eval {} Recall'.format(i)] = performance[2]
-                    hit_vis_dict['Eval {} Hit'.format(i)] = performance[3]
-                    ndcg_vis_dict['Eval {} NDCG'.format(i)] = performance[4]
-                
-                if is_best:
-                    log_str = ["Best performances in {} step!".format(trainer.best_step)]
-                    log_str += ["{} : {}.".format(s, "%.5f" % f1_vis_dict[s]) for s in f1_vis_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % p_vis_dict[s]) for s in p_vis_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % r_vis_dict[s]) for s in r_vis_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % hit_vis_dict[s]) for s in hit_vis_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % ndcg_vis_dict[s]) for s in ndcg_vis_dict]
-                    
-                    vis.log("\n".join(log_str), win_name="Best Performances")
-
-                vis.plot_many_stack(f1_vis_dict, win_name="F1 Score@{}".format(FLAGS.topn))
-                
-                vis.plot_many_stack(p_vis_dict, win_name="Precision@{}".format(FLAGS.topn))
-
-                vis.plot_many_stack(r_vis_dict, win_name="Recall@{}".format(FLAGS.topn))
-
-                vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
-
-                vis.plot_many_stack(ndcg_vis_dict, win_name="NDCG@{}".format(FLAGS.topn))
             total_loss = 0.0
+            
+            if trainer.step > 0:
+                is_best = trainer.new_performance(performances[0], performances)
+                # visuliazation
+                if vis is not None:
+                    vis.plot_many_stack({'Train Loss': total_loss},
+                    win_name="Loss Curve")
+                    f1_vis_dict = {}
+                    p_vis_dict = {}
+                    r_vis_dict = {}
+                    hit_vis_dict = {}
+                    ndcg_vis_dict = {}
+                    for i, performance in enumerate(performances):
+                        f1_vis_dict['Eval {} F1'.format(i)] = performance[0]
+                        p_vis_dict['Eval {} Precision'.format(i)] = performance[1]
+                        r_vis_dict['Eval {} Recall'.format(i)] = performance[2]
+                        hit_vis_dict['Eval {} Hit'.format(i)] = performance[3]
+                        ndcg_vis_dict['Eval {} NDCG'.format(i)] = performance[4]
+                    
+                    if is_best:
+                        log_str = ["Best performances in {} step!".format(trainer.best_step)]
+                        log_str += ["{} : {}.".format(s, "%.5f" % f1_vis_dict[s]) for s in f1_vis_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % p_vis_dict[s]) for s in p_vis_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % r_vis_dict[s]) for s in r_vis_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % hit_vis_dict[s]) for s in hit_vis_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % ndcg_vis_dict[s]) for s in ndcg_vis_dict]
+                        
+                        vis.log("\n".join(log_str), win_name="Best Performances")
+
+                    vis.plot_many_stack(f1_vis_dict, win_name="F1 Score@{}".format(FLAGS.topn))
+                    
+                    vis.plot_many_stack(p_vis_dict, win_name="Precision@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack(r_vis_dict, win_name="Recall@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack(ndcg_vis_dict, win_name="NDCG@{}".format(FLAGS.topn))
 
         rating_batch = next(train_iter)
         u, pi, ni = getNegRatings(rating_batch, item_total, all_dicts=all_dicts)

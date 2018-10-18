@@ -239,59 +239,60 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
                 kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=False, is_report=is_report))
 
-            is_best = trainer.new_performance(rec_performances[0], rec_performances)
-
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
-            # visuliazation
-            if vis is not None:
-                vis.plot_many_stack({'Train Loss': total_loss},
-                win_name="Loss Curve")
-                f1_dict = {}
-                p_dict = {}
-                r_dict = {}
-                rec_hit_dict = {}
-                ndcg_dict = {}
-                for i, performance in enumerate(rec_performances):
-                    f1_dict['Rec Eval {} F1'.format(i)] = performance[0]
-                    p_dict['Rec Eval {} Precision'.format(i)] = performance[1]
-                    r_dict['Rec Eval {} Recall'.format(i)] = performance[2]
-                    rec_hit_dict['Rec Eval {} Hit'.format(i)] = performance[3]
-                    ndcg_dict['Rec Eval {} NDCG'.format(i)] = performance[4]
-                
-                kg_hit_dict = {}
-                meanrank_dict = {}
-                for i, performance in enumerate(kg_performances):
-                    kg_hit_dict['KG Eval {} Hit'.format(i)] = performance[0]
-                    meanrank_dict['KG Eval {} MeanRank'.format(i)] = performance[1]
-
-                if is_best:
-                    log_str = ["Best performances in {} step!".format(trainer.best_step)]
-                    log_str += ["{} : {}.".format(s, "%.5f" % f1_dict[s]) for s in f1_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % p_dict[s]) for s in p_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % r_dict[s]) for s in r_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % rec_hit_dict[s]) for s in rec_hit_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % ndcg_dict[s]) for s in ndcg_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % kg_hit_dict[s]) for s in kg_hit_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % meanrank_dict[s]) for s in meanrank_dict]
-                    
-                    vis.log("\n".join(log_str), win_name="Best Performances")
-
-                vis.plot_many_stack(f1_dict, win_name="Rec F1 Score@{}".format(FLAGS.topn))
-                
-                vis.plot_many_stack(p_dict, win_name="Rec Precision@{}".format(FLAGS.topn))
-
-                vis.plot_many_stack(r_dict, win_name="Rec Recall@{}".format(FLAGS.topn))
-
-                vis.plot_many_stack(rec_hit_dict, win_name="Rec Hit Ratio@{}".format(FLAGS.topn))
-
-                vis.plot_many_stack(ndcg_dict, win_name="Rec NDCG@{}".format(FLAGS.topn))
-
-                vis.plot_many_stack(kg_hit_dict, win_name="KG Hit Ratio@{}".format(FLAGS.topn))
-
-                vis.plot_many_stack(meanrank_dict, win_name="KG MeanRank")
-
             total_loss = 0.0
+
+            if trainer.step > 0:
+                is_best = trainer.new_performance(rec_performances[0], rec_performances)
+                # visuliazation
+                if vis is not None:
+                    vis.plot_many_stack({'Train Loss': total_loss},
+                    win_name="Loss Curve")
+                    f1_dict = {}
+                    p_dict = {}
+                    r_dict = {}
+                    rec_hit_dict = {}
+                    ndcg_dict = {}
+                    for i, performance in enumerate(rec_performances):
+                        f1_dict['Rec Eval {} F1'.format(i)] = performance[0]
+                        p_dict['Rec Eval {} Precision'.format(i)] = performance[1]
+                        r_dict['Rec Eval {} Recall'.format(i)] = performance[2]
+                        rec_hit_dict['Rec Eval {} Hit'.format(i)] = performance[3]
+                        ndcg_dict['Rec Eval {} NDCG'.format(i)] = performance[4]
+                    
+                    kg_hit_dict = {}
+                    meanrank_dict = {}
+                    for i, performance in enumerate(kg_performances):
+                        kg_hit_dict['KG Eval {} Hit'.format(i)] = performance[0]
+                        meanrank_dict['KG Eval {} MeanRank'.format(i)] = performance[1]
+
+                    if is_best:
+                        log_str = ["Best performances in {} step!".format(trainer.best_step)]
+                        log_str += ["{} : {}.".format(s, "%.5f" % f1_dict[s]) for s in f1_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % p_dict[s]) for s in p_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % r_dict[s]) for s in r_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % rec_hit_dict[s]) for s in rec_hit_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % ndcg_dict[s]) for s in ndcg_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % kg_hit_dict[s]) for s in kg_hit_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % meanrank_dict[s]) for s in meanrank_dict]
+                        
+                        vis.log("\n".join(log_str), win_name="Best Performances")
+
+                    vis.plot_many_stack(f1_dict, win_name="Rec F1 Score@{}".format(FLAGS.topn))
+                    
+                    vis.plot_many_stack(p_dict, win_name="Rec Precision@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack(r_dict, win_name="Rec Recall@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack(rec_hit_dict, win_name="Rec Hit Ratio@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack(ndcg_dict, win_name="Rec NDCG@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack(kg_hit_dict, win_name="KG Hit Ratio@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack(meanrank_dict, win_name="KG MeanRank")
+
         # recommendation train
         if trainer.step % 10 < step_to_switch :
             rating_batch = next(rating_train_iter)

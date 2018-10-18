@@ -143,30 +143,32 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
 
                 performances.append( evaluate(FLAGS, model, entity_total, relation_total, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, logger, eval_descending=False, is_report=is_report))
 
-            is_best = trainer.new_performance(performances[0], performances)
-
+            # prepare for next train step
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
-            # visuliazation
-            if vis is not None:
-                vis.plot_many_stack({'Train Loss': total_loss},
-                win_name="Loss Curve")
-                hit_vis_dict = {}
-                meanrank_vis_dict = {}
-                for i, performance in enumerate(performances):
-                    hit_vis_dict['Eval {} Hit'.format(i)] = performance[0]
-                    meanrank_vis_dict['Eval {} MeanRank'.format(i)] = performance[1]
-                
-                if is_best:
-                    log_str = ["Best performances in {} step!".format(trainer.best_step)]
-                    log_str += ["{} : {}.".format(s, "%.5f" % hit_vis_dict[s]) for s in hit_vis_dict]
-                    log_str += ["{} : {}.".format(s, "%.5f" % meanrank_vis_dict[s]) for s in meanrank_vis_dict]
-                    vis.log("\n".join(log_str), win_name="Best Performances")
-
-                vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
-
-                vis.plot_many_stack(meanrank_vis_dict, win_name="MeanRank@{}".format(FLAGS.topn))
             total_loss = 0.0
+
+            if trainer.step > 0:
+                is_best = trainer.new_performance(performances[0], performances)
+                # visuliazation
+                if vis is not None:
+                    vis.plot_many_stack({'Train Loss': total_loss},
+                    win_name="Loss Curve")
+                    hit_vis_dict = {}
+                    meanrank_vis_dict = {}
+                    for i, performance in enumerate(performances):
+                        hit_vis_dict['Eval {} Hit'.format(i)] = performance[0]
+                        meanrank_vis_dict['Eval {} MeanRank'.format(i)] = performance[1]
+                    
+                    if is_best:
+                        log_str = ["Best performances in {} step!".format(trainer.best_step)]
+                        log_str += ["{} : {}.".format(s, "%.5f" % hit_vis_dict[s]) for s in hit_vis_dict]
+                        log_str += ["{} : {}.".format(s, "%.5f" % meanrank_vis_dict[s]) for s in meanrank_vis_dict]
+                        vis.log("\n".join(log_str), win_name="Best Performances")
+
+                    vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
+
+                    vis.plot_many_stack(meanrank_vis_dict, win_name="MeanRank@{}".format(FLAGS.topn))
 
         triple_batch = next(train_iter)
         ph, pt, pr, nh, nt, nr = getTrainTripleBatch(triple_batch, entity_total, all_head_dicts=all_head_dicts, all_tail_dicts=all_tail_dicts)
