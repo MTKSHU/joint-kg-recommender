@@ -91,8 +91,8 @@ class MyEvalKGProcess(multiprocessing.Process):
                         fliter_samples.update(dic[pred[0]])
 
             per_scores = pred[1] if not self.descending else -pred[1]
-
-            self.L.extend( getKGPerformance(per_scores, gold, fliter_samples=fliter_samples, topn=self.topn) )
+            hits, gold_ranks, gold_ids = getKGPerformance(per_scores, gold, fliter_samples=fliter_samples, topn=self.topn)
+            self.L.extend( list(zip(hits, gold_ranks, [pred[0]]*len(hits), gold_ids)) )
 
 # pred_scores: batch * item, [(id, numpy.array), ...], all_dicts:(train_dict, valid_dict, test_dict)
 def evalKGProcess(pred_scores, eval_dict, all_dicts=None, descending=True, num_processes=multiprocessing.cpu_count(), topn=10, queue_limit=10):
@@ -128,6 +128,7 @@ def getKGPerformance(pred, gold, fliter_samples=None, topn=10):
     
     gold_ranks = []
     hits = []
+    gold_ids = []
     current_rank = 0
     topn_to_skip = 0
     for rank_id in pred_ranks:
@@ -136,12 +137,13 @@ def getKGPerformance(pred, gold, fliter_samples=None, topn=10):
             continue
         if rank_id in gold:
             gold_ranks.append(current_rank)
+            gold_ids.append(rank_id)
             hits.append(1 if current_rank < topn else 0)
             if len(gold_ranks) == len(gold) : break
         else:
             current_rank += 1
 
-    return list(zip(hits, gold_ranks))
+    return hits, gold_ranks, gold_ids
 
 class MyEvalRecProcess(multiprocessing.Process):
     def __init__(self, L, eval_dict, all_dicts=None, descending=True, topn=10, queue=None):
@@ -176,9 +178,9 @@ class MyEvalRecProcess(multiprocessing.Process):
                         fliter_samples.update(dic[pred[0]])
 
             per_scores = pred[1] if not self.descending else -pred[1]
-            f1, p, r, hit, ndcg = getRecPerformance(per_scores, gold, fliter_samples=fliter_samples, topn=self.topn)
+            f1, p, r, hit, ndcg, top_ids = getRecPerformance(per_scores, gold, fliter_samples=fliter_samples, topn=self.topn)
 
-            self.L.append( [f1, p, r, hit, ndcg] )
+            self.L.append( [f1, p, r, hit, ndcg, (pred[0], top_ids, gold)] )
 
 # pred_scores: batch * item, [(id, numpy.array), ...], all_dicts:(train_dict, valid_dict, test_dict)
 def evalRecProcess(pred_scores, eval_dict, all_dicts=None, descending=True, num_processes=multiprocessing.cpu_count(), topn=10, queue_limit=10):
@@ -215,13 +217,14 @@ def getRecPerformance(pred, gold, fliter_samples=None, topn=10):
     hits = []
     current_rank = 0
     topn_to_skip = 0
+    top_ids = []
     for rank_id in pred_ranks:
         if fliter_samples is not None and rank_id in fliter_samples :
             if current_rank < topn : topn_to_skip += 1
             continue
 
         hits.append(1 if rank_id in gold else 0)
-        
+        top_ids.append(rank_id)
         current_rank += 1
         if current_rank >= topn : break
 
@@ -242,7 +245,7 @@ def getRecPerformance(pred, gold, fliter_samples=None, topn=10):
         f1 = 2 * p * r / (p + r)
         ndcg = ndcg_at_k(hits, k)
 
-    return f1, p, r, hit, ndcg
+    return f1, p, r, hit, ndcg, top_ids
 
 def recursively_set_device(inp, gpu=USE_CUDA):
     if hasattr(inp, 'keys'):

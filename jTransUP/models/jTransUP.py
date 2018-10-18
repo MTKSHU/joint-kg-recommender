@@ -205,3 +205,14 @@ class jTransUPModel(nn.Module):
         else:
             score = torch.sum((c_t_expand-proj_ent_e) ** 2, 2)
         return score
+    
+    def getPreferences(self, u_id, i_ids):
+        item_num = len(i_ids)
+        # item_num * dim
+        u_e = self.user_embeddings(u_id.expand(item_num))
+        # item_num * dim
+        i_e = self.item_embeddings(i_ids)
+        # item_num * relation_total
+        pre_probs = torch.matmul(u_e + i_e, torch.t(self.rel_embeddings.weight)) / 2
+
+        return pre_probs

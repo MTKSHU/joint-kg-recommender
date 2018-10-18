@@ -42,6 +42,10 @@ def get_flags():
         "L1_flag",
         False,
         "If set to True, use L1 distance as dissimilarity; else, use L2.")
+    gflags.DEFINE_bool(
+        "is_report",
+        False,
+        "If set to True, use L1 distance as dissimilarity; else, use L2.")
     gflags.DEFINE_float("l2_lambda", 1e-5, "")
     gflags.DEFINE_integer("embedding_size", 64, ".")
     gflags.DEFINE_integer("negtive_samples", 1, ".")

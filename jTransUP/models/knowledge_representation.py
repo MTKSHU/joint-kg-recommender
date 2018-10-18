@@ -17,7 +17,7 @@ from torch.autograd import Variable as V
 from jTransUP.models.base import get_flags, flag_defaults, init_model
 from jTransUP.data.load_triple_data import load_data
 from jTransUP.utils.trainer import ModelTrainer
-from jTransUP.utils.misc import to_gpu, evalKGProcess
+from jTransUP.utils.misc import to_gpu, evalKGProcess, USE_CUDA
 from jTransUP.utils.loss import bprLoss, orthogonalLoss, normLoss
 from jTransUP.utils.visuliazer import Visualizer
 from jTransUP.utils.data import getTrainTripleBatch
@@ -25,7 +25,7 @@ import jTransUP.utils.loss as loss
 
 FLAGS = gflags.FLAGS
 
-def evaluate(FLAGS, model, entity_total, relation_total, eval_head_iter, eval_tail_iter, eval_head_dict, eval_tail_dict, all_head_dicts, all_tail_dicts, logger, eval_descending=True, show_sample=False):
+def evaluate(FLAGS, model, entity_total, relation_total, eval_head_iter, eval_tail_iter, eval_head_dict, eval_tail_dict, all_head_dicts, all_tail_dicts, logger, eval_descending=True, is_report=False):
     # Evaluate
     total_batches = len(eval_head_iter) + len(eval_tail_iter)
     # processing bar
@@ -66,10 +66,12 @@ def evaluate(FLAGS, model, entity_total, relation_total, eval_head_iter, eval_ta
     pbar.close()
 
     # hit, rank
+    head_performances = [result[:2] for result in head_results]
+    tail_performances = [result[:2] for result in tail_results]
 
-    head_hit, head_mean_rank = np.array(head_results).mean(axis=0)
+    head_hit, head_mean_rank = np.array(head_performances).mean(axis=0)
 
-    tail_hit, tail_mean_rank = np.array(tail_results).mean(axis=0)
+    tail_hit, tail_mean_rank = np.array(tail_performances).mean(axis=0)
 
     logger.info("head hit:{:.4f}, head mean rank:{:.4f}, topn:{}.".format(head_hit, head_mean_rank, FLAGS.topn))
 
@@ -83,10 +85,26 @@ def evaluate(FLAGS, model, entity_total, relation_total, eval_head_iter, eval_ta
 
     logger.info("avg hit:{:.4f}, avg mean rank:{:.4f}, topn:{}.".format(avg_hit, avg_mean_rank, FLAGS.topn))
 
+    if is_report:
+        for result in head_results:
+            hit = result[0]
+            rank = result[1]
+            t = result[2][0]
+            r = result[2][1]
+            gold_h = result[3]
+            logger.info("H\t{}\t{}\t{}\t{}".format(gold_h, t, r, hit))
+        for result in tail_results:
+            hit = result[0]
+            rank = result[1]
+            h = result[2][0]
+            r = result[2][1]
+            gold_t = result[3]
+            logger.info("T\t{}\t{}\t{}\t{}".format(h, gold_t, r, hit))
+
     return avg_hit, avg_mean_rank
 
 def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
-            entity_total, relation_total, logger, vis=None, show_sample=False):
+            entity_total, relation_total, logger, vis=None, is_report=False):
     train_iter, train_total, train_list, train_head_dict, train_tail_dict = train_dataset
 
     all_head_dicts = None
@@ -123,7 +141,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                     eval_head_dicts = [train_head_dict] + [tmp_data[4] for j, tmp_data in enumerate(eval_datasets) if j!=i]
                     eval_tail_dicts = [train_tail_dict] + [tmp_data[5] for j, tmp_data in enumerate(eval_datasets) if j!=i]
 
-                performances.append( evaluate(FLAGS, model, entity_total, relation_total, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, logger, eval_descending=False, show_sample=show_sample))
+                performances.append( evaluate(FLAGS, model, entity_total, relation_total, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, logger, eval_descending=False, is_report=is_report))
 
             is_best = trainer.new_performance(performances[0], performances)
 
@@ -244,7 +262,7 @@ def run(only_forward=False):
     trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
 
     if FLAGS.load_ckpt_file is not None:
-        trainer.loadEmbedding(FLAGS.load_ckpt_file, model.state_dict())
+        trainer.loadEmbedding(FLAGS.load_ckpt_file, model.state_dict(), cpu=not USE_CUDA)
 
     # Do an evaluation-only run.
     if only_forward:
@@ -258,8 +276,8 @@ def run(only_forward=False):
             evaluate(
                 FLAGS,
                 model,
-                user_total,
-                item_total,
+                entity_total,
+                relation_total,
                 eval_data[0],
                 eval_data[1],
                 eval_data[4],
@@ -268,7 +286,7 @@ def run(only_forward=False):
                 all_tail_dicts,
                 logger,
                 eval_descending=False,
-                show_sample=False)
+                is_report=FLAGS.is_report)
     else:
         train_loop(
             FLAGS,
@@ -280,7 +298,7 @@ def run(only_forward=False):
             relation_total,
             logger,
             vis=vis,
-            show_sample=False)
+            is_report=False)
     if vis is not None:
         vis.log("Finish!", win_name="Best Performances")
 

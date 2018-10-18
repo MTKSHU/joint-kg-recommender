@@ -45,7 +45,7 @@ def getMappedItems(e_ids, e_remap, new_map):
         new_e_ids.append(new_index[0])
     return new_e_ids, i_ids
 
-def evaluateRec(FLAGS, model, eval_iter, eval_dict, all_dicts, i_map, logger, eval_descending=True, show_sample=False):
+def evaluateRec(FLAGS, model, eval_iter, eval_dict, all_dicts, i_map, logger, eval_descending=True, is_report=False):
     # Evaluate
     total_batches = len(eval_iter)
     # processing bar
@@ -70,13 +70,34 @@ def evaluateRec(FLAGS, model, eval_iter, eval_dict, all_dicts, i_map, logger, ev
         pbar.update(1)
     pbar.close()
 
-    f1, p, r, hit, ndcg = np.array(results).mean(axis=0)
+    performances = [result[:5] for result in results]
+
+    f1, p, r, hit, ndcg = np.array(performances).mean(axis=0)
 
     logger.info("f1:{:.4f}, p:{:.4f}, r:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, topn:{}.".format(f1, p, r, hit, ndcg, FLAGS.topn))
 
+    if is_report:
+        predict_tuples = [result[-1] for result in results]
+        for pred_tuple in predict_tuples:
+            u_id = pred_tuple[0]
+            top_ids = pred_tuple[1]
+            gold_ids = list(pred_tuple[2])
+            if FLAGS.model_type in ["transup", "jtransup"]:
+                for d in all_dicts:
+                    gold_ids += d[u_id]
+                u_var = to_gpu(V(torch.LongTensor([u_id])))
+                i_var = to_gpu(V(torch.LongTensor(gold_ids)))
+                # item_num * relation_total
+                probs = model.getPreferences(u_var, i_var)
+                max_rel_index = torch.max(probs, 1)[1]
+                gold_strs = ",".join(["{}({})".format(ir[0], ir[1]) for ir in zip(gold_ids, max_rel_index.data.tolist())])
+            else:
+                gold_strs = ",".join([str(i) for i in gold_ids])
+            logger.info("user:{}\tgold:{}\ttop:{}".format(u_id, gold_strs, ",".join([str(i) for i in top_ids])))
+
     return f1, p, r, hit, ndcg
 
-def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eval_tail_dict, all_head_dicts, all_tail_dicts, e_map, logger, eval_descending=True, show_sample=False):
+def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eval_tail_dict, all_head_dicts, all_tail_dicts, e_map, logger, eval_descending=True, is_report=False):
     # Evaluate
     total_batches = len(eval_head_iter) + len(eval_tail_iter)
     # processing bar
@@ -124,10 +145,12 @@ def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eva
     pbar.close()
 
     # hit, rank
+    head_performances = [result[:2] for result in head_results]
+    tail_performances = [result[:2] for result in tail_results]
 
-    head_hit, head_mean_rank = np.array(head_results).mean(axis=0)
+    head_hit, head_mean_rank = np.array(head_performances).mean(axis=0)
 
-    tail_hit, tail_mean_rank = np.array(tail_results).mean(axis=0)
+    tail_hit, tail_mean_rank = np.array(tail_performances).mean(axis=0)
 
     logger.info("head hit:{:.4f}, head mean rank:{:.4f}, topn:{}.".format(head_hit, head_mean_rank, FLAGS.topn))
 
@@ -141,9 +164,25 @@ def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eva
 
     logger.info("avg hit:{:.4f}, avg mean rank:{:.4f}, topn:{}.".format(avg_hit, avg_mean_rank, FLAGS.topn))
 
+    if is_report:
+        for result in head_results:
+            hit = result[0]
+            rank = result[1]
+            t = result[2][0]
+            r = result[2][1]
+            gold_h = result[3]
+            logger.info("H\t{}\t{}\t{}\t{}".format(gold_h, t, r, hit))
+        for result in tail_results:
+            hit = result[0]
+            rank = result[1]
+            h = result[2][0]
+            r = result[2][1]
+            gold_t = result[3]
+            logger.info("T\t{}\t{}\t{}\t{}".format(h, gold_t, r, hit))
+
     return avg_hit, avg_mean_rank
 
-def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset, rating_eval_datasets, triple_eval_datasets, e_map, i_map, ikg_map, logger, vis=None, show_sample=False):
+def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset, rating_eval_datasets, triple_eval_datasets, e_map, i_map, ikg_map, logger, vis=None, is_report=False):
     rating_train_iter, rating_train_total, rating_train_list, rating_train_dict = rating_train_dataset
 
     triple_train_iter, triple_train_total, triple_train_list, head_train_dict, tail_train_dict = triple_train_dataset
@@ -188,7 +227,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                 if FLAGS.filter_wrong_corrupted:
                     all_eval_dicts = [rating_train_dict] + [tmp_data[3] for j, tmp_data in enumerate(rating_eval_datasets) if j!=i]
 
-                rec_performances.append( evaluateRec(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, i_map, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
+                rec_performances.append( evaluateRec(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, i_map, logger, eval_descending=True if trainer.model_target == 1 else False, is_report=is_report))
 
             kg_performances = []
             for i, eval_data in enumerate(triple_eval_datasets):
@@ -198,7 +237,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                     eval_head_dicts = [head_train_dict] + [tmp_data[4] for j, tmp_data in enumerate(triple_eval_datasets) if j!=i]
                     eval_tail_dicts = [tail_train_dict] + [tmp_data[5] for j, tmp_data in enumerate(triple_eval_datasets) if j!=i]
 
-                kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=False, show_sample=show_sample))
+                kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=False, is_report=is_report))
 
             is_best = trainer.new_performance(rec_performances[0], rec_performances)
 
@@ -429,7 +468,7 @@ def run(only_forward=False):
                 i_map,
                 logger,
                 eval_descending=True if trainer.model_target == 1 else False,
-                show_sample=False)
+                is_report=FLAGS.is_report)
         # head_iter, tail_iter, eval_total, eval_list, eval_head_dict, eval_tail_dict
         for i, eval_data in enumerate(triple_eval_datasets):
             all_head_dicts = None
@@ -449,7 +488,7 @@ def run(only_forward=False):
                 e_map,
                 logger,
                 eval_descending=False,
-                show_sample=False)
+                is_report=FLAGS.is_report)
     else:
         train_loop(
             FLAGS,
@@ -464,7 +503,7 @@ def run(only_forward=False):
             ikg_map,
             logger,
             vis=vis,
-            show_sample=False)
+            is_report=False)
     if vis is not None:
         vis.log("Finish!", win_name="Best Performances")
 

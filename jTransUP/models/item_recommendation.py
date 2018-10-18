@@ -24,7 +24,7 @@ from jTransUP.utils.data import getNegRatings
 
 FLAGS = gflags.FLAGS
 
-def evaluate(FLAGS, model, eval_iter, eval_dict, all_dicts, logger, eval_descending=True, show_sample=False):
+def evaluate(FLAGS, model, eval_iter, eval_dict, all_dicts, logger, eval_descending=True, is_report=False):
     # Evaluate
     total_batches = len(eval_iter)
     # processing bar
@@ -44,14 +44,34 @@ def evaluate(FLAGS, model, eval_iter, eval_dict, all_dicts, logger, eval_descend
         pbar.update(1)
     pbar.close()
 
-    f1, p, r, hit, ndcg = np.array(results).mean(axis=0)
+    performances = [result[:5] for result in results]
+    f1, p, r, hit, ndcg = np.array(performances).mean(axis=0)
 
     logger.info("f1:{:.4f}, p:{:.4f}, r:{:.4f}, hit:{:.4f}, ndcg:{:.4f}, topn:{}.".format(f1, p, r, hit, ndcg, FLAGS.topn))
+
+    if is_report:
+        predict_tuples = [result[-1] for result in results]
+        for pred_tuple in predict_tuples:
+            u_id = pred_tuple[0]
+            top_ids = pred_tuple[1]
+            gold_ids = list(pred_tuple[2])
+            if FLAGS.model_type in ["transup", "jtransup"]:
+                for d in all_dicts:
+                    gold_ids += d[u_id]
+                u_var = to_gpu(V(torch.LongTensor([u_id])))
+                i_var = to_gpu(V(torch.LongTensor(gold_ids)))
+                # item_num * relation_total
+                probs = model.getPreferences(u_var, i_var)
+                max_rel_index = torch.max(probs, 1)[1]
+                gold_strs = ",".join(["{}({})".format(ir[0], ir[1]) for ir in zip(gold_ids, max_rel_index.data.tolist())])
+            else:
+                gold_strs = ",".join([str(i) for i in gold_ids])
+            logger.info("user:{}\tgold:{}\ttop:{}".format(u_id, gold_strs, ",".join([str(i) for i in top_ids])))
 
     return f1, p, r, hit, ndcg
 
 def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
-            user_total, item_total, logger, vis=None, show_sample=False):
+            user_total, item_total, logger, vis=None, is_report=False):
     train_iter, train_total, train_list, train_dict = train_dataset
 
     all_dicts = None
@@ -84,7 +104,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                 if FLAGS.filter_wrong_corrupted:
                     all_eval_dicts = [train_dict] + [tmp_data[3] for j, tmp_data in enumerate(eval_datasets) if j!=i]
 
-                performances.append( evaluate(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, show_sample=show_sample))
+                performances.append( evaluate(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, is_report=is_report))
 
             is_best = trainer.new_performance(performances[0], performances)
 
@@ -226,7 +246,7 @@ def run(only_forward=False):
                 all_dicts,
                 logger,
                 eval_descending=True if trainer.model_target == 1 else False,
-                show_sample=False)
+                is_report=FLAGS.is_report)
     else:
         train_loop(
             FLAGS,
@@ -238,7 +258,7 @@ def run(only_forward=False):
             item_total,
             logger,
             vis=vis,
-            show_sample=False)
+            is_report=False)
     if vis is not None:
         vis.log("Finish!", win_name="Best Performances")
     
