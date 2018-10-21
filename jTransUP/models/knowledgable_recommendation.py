@@ -206,7 +206,8 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
     # New Training Loop
     pbar = None
-    total_loss = 0.0
+    rec_total_loss = 0.0
+    kg_total_loss = 0.0
     for _ in range(trainer.step, FLAGS.training_steps):
 
         if FLAGS.early_stopping_steps_to_wait > 0 and (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
@@ -218,8 +219,9 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
         if trainer.step % FLAGS.eval_interval_steps == 0:
             if pbar is not None:
                 pbar.close()
-            total_loss /= FLAGS.eval_interval_steps
-            logger.info("train loss:{:.4f}!".format(total_loss))
+            rec_total_loss /= (FLAGS.eval_interval_steps * FLAGS.joint_ratio)
+            kg_total_loss /= (FLAGS.eval_interval_steps * (1-FLAGS.joint_ratio))
+            logger.info("rec train loss:{:.4f}, kg train loss:{:.4f}!".format(rec_total_loss, kg_total_loss))
 
             rec_performances = []
             for i, eval_data in enumerate(rating_eval_datasets):
@@ -239,16 +241,13 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
                 kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=False, is_report=is_report))
 
-            pbar = tqdm(total=FLAGS.eval_interval_steps)
-            pbar.set_description("Training")
-            total_loss = 0.0
-
             if trainer.step > 0:
                 is_best = trainer.new_performance(rec_performances[0], rec_performances)
                 # visuliazation
                 if vis is not None:
-                    vis.plot_many_stack({'Train Loss': total_loss},
+                    vis.plot_many_stack({'Rec Train Loss': rec_total_loss, 'KG Train Loss':kg_total_loss},
                     win_name="Loss Curve")
+
                     f1_dict = {}
                     p_dict = {}
                     r_dict = {}
@@ -292,6 +291,11 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                     vis.plot_many_stack(kg_hit_dict, win_name="KG Hit Ratio@{}".format(FLAGS.topn))
 
                     vis.plot_many_stack(meanrank_dict, win_name="KG MeanRank")
+
+            pbar = tqdm(total=FLAGS.eval_interval_steps)
+            pbar.set_description("Training")
+            rec_total_loss = 0.0
+            kg_total_loss = 0.0
 
         # recommendation train
         if trainer.step % 10 < step_to_switch :
@@ -384,7 +388,10 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
         # Gradient descent step.
         trainer.optimizer_step()
-        total_loss += losses.data[0]
+        if trainer.step % 10 < step_to_switch :
+            rec_total_loss += losses.data[0]
+        else:
+            kg_total_loss += losses.data[0]
         pbar.update(1)
     
 
