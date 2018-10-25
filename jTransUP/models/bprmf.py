@@ -5,7 +5,7 @@ from torch.autograd import Variable as V
 
 from jTransUP.utils.misc import to_gpu
 
-def build_model(FLAGS, user_total, item_total, entity_total, relation_total):
+def build_model(FLAGS, user_total, item_total, entity_total, relation_total, i_map=None, e_map=None, new_map=None):
     model_cls = BPRMF
     return model_cls(
                 FLAGS.embedding_size,
@@ -49,7 +49,6 @@ class BPRMF(nn.Module):
         return torch.bmm(u_e.unsqueeze(1), i_e.unsqueeze(2)).squeeze()
     
     def evaluate(self, u_ids):
-        batch_size = len(u_ids)
         u_e = self.user_embeddings(u_ids)
 
         return torch.matmul(u_e, self.item_embeddings.weight.t())

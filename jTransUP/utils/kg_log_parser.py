@@ -134,7 +134,7 @@ def parseRecResults(log_filename):
                     tmp_u_ids.add(u_id)
                     rating_dict[(gold_id,rel_id)] = tmp_u_ids
                     total_num += 1
-    print("parse {} item/rel pairs, avgerage {} users, invovled {} relations!".format(len(rating_dict), total_num/len(rating_dict), len(rel_set))
+    print("parse {} item/rel pairs, avgerage {} users, invovled {} relations!".format(len(rating_dict), total_num/len(rating_dict), len(rel_set)))
 
     return rating_dict, rel_set
 
@@ -154,8 +154,8 @@ def compareLogs(log1, log2, kg2i_map, i2kg_map, rating_dict, triple_head_dict, t
             if len(target_heads) == 0 or tr not in triple_head_dict: continue
 
             gold_heads = triple_head_dict[tr]
-            
-            outputHead(fout, tr, target_heads, kg2i_map, gold_heads, rating_dict, rel_set=rel_set, u_map_reverse=u_map_reverse, i_map_reverse=i_map_reverse, e_map_reverse=e_map_reverse, r_map_reverse=r_map_reverse)
+
+            outputHead(fout, tr, target_heads, kg2i_map, i2kg_map, gold_heads, rating_dict, rel_set=rel_set, u_map_reverse=u_map_reverse, i_map_reverse=i_map_reverse, e_map_reverse=e_map_reverse, r_map_reverse=r_map_reverse)
 
         for hr in tail_results1:
             if hr not in tail_results2 : continue
@@ -194,9 +194,9 @@ def outputHead(fout, tr, target_heads, kg2i_map, i2kg_map, gold_heads, rating_di
             target_users = u_ids & gu_ids
             if len(target_users) > 0:
                 if out_reverse:
-                    tmp_str = "{},{},[{}}]".format(e_map_reverse[i2kg_map[h]], e_map_reverse[i2kg_map[gh]], ",".join([u_map_reverse[u] for u in target_users]))
+                    tmp_str = "{},{},[{}]".format(e_map_reverse[i2kg_map[h]], e_map_reverse[i2kg_map[gh]], ",".join([str(u_map_reverse[u]) for u in target_users]))
                 else:
-                    tmp_str = "{},{},[{}}]".format(h, gh, ",".join([str(u) for u in target_users]))
+                    tmp_str = "{},{},[{}]".format(h, gh, ",".join([str(u) for u in target_users]))
                 out_str += "\tusers:{}".format(tmp_str)
         if rel_set is not None:
             tmp_rels = rel_set - r
@@ -209,9 +209,9 @@ def outputHead(fout, tr, target_heads, kg2i_map, i2kg_map, gold_heads, rating_di
                     target_users = u_ids & gu_ids
                     if len(target_users) > 0:
                         if out_reverse:
-                            tmp_str = "{},{},{},[{}}]".format(e_map_reverse[i2kg_map[h]], e_map_reverse[i2kg_map[gh]], r_map_reverse[tmp_r], ",".join([u_map_reverse[u] for u in target_users]))
+                            tmp_str = "{},{},{},[{}]".format(e_map_reverse[i2kg_map[h]], e_map_reverse[i2kg_map[gh]], r_map_reverse[tmp_r], ",".join([u_map_reverse[u] for u in target_users]))
                         else:
-                            tmp_str = "{},{},{},[{}}]".format(h, gh, r_map_reverse[tmp_r], ",".join([str(u) for u in target_users]))
+                            tmp_str = "{},{},{},[{}]".format(h, gh, r_map_reverse[tmp_r], ",".join([str(u) for u in target_users]))
                         out_str += "\tusers:{}".format(tmp_str)
     fout.write("{}\n".format(out_str))
 
@@ -239,9 +239,9 @@ def outputTail(fout, hr, target_tails, kg2i_map, i2kg_map, gold_tails, rating_di
             target_users = u_ids & gu_ids
             if len(target_users) > 0:
                 if out_reverse:
-                    tmp_str = "{},{},[{}}]".format(e_map_reverse[i2kg_map[t]], e_map_reverse[i2kg_map[gt]], ",".join([u_map_reverse[u] for u in target_users]))
+                    tmp_str = "{},{},[{}]".format(e_map_reverse[i2kg_map[t]], e_map_reverse[i2kg_map[gt]], ",".join([str(u_map_reverse[u]) for u in target_users]))
                 else:
-                    tmp_str = "{},{},[{}}]".format(t, gt, ",".join([str(u) for u in target_users]))
+                    tmp_str = "{},{},[{}]".format(t, gt, ",".join([str(u) for u in target_users]))
                 out_str += "\tusers:{}".format(tmp_str)
         if rel_set is not None:
             tmp_rels = rel_set - r
@@ -254,9 +254,9 @@ def outputTail(fout, hr, target_tails, kg2i_map, i2kg_map, gold_tails, rating_di
                     target_users = u_ids & gu_ids
                     if len(target_users) > 0:
                         if out_reverse:
-                            tmp_str = "{},{},{},[{}}]".format(e_map_reverse[i2kg_map[t]], e_map_reverse[i2kg_map[gt]], r_map_reverse[tmp_r], ",".join([u_map_reverse[u] for u in target_users]))
+                            tmp_str = "{},{},{},[{}]".format(e_map_reverse[i2kg_map[t]], e_map_reverse[i2kg_map[gt]], r_map_reverse[tmp_r], ",".join([str(u_map_reverse[u]) for u in target_users]))
                         else:
-                            tmp_str = "{},{},{},[{}}]".format(t, gt, r_map_reverse[tmp_r], ",".join([str(u) for u in target_users]))
+                            tmp_str = "{},{},{},[{}]".format(t, gt, r_map_reverse[tmp_r], ",".join([str(u) for u in target_users]))
                         out_str += "\tusers:{}".format(tmp_str)
     fout.write("{}\n".format(out_str))
 
@@ -265,7 +265,7 @@ root_path = '/Users/caoyixin/Github/joint-kg-recommender'
 dataset_path = root_path + '/datasets/ml1m'
 
 transh_log = root_path + '/log/ml1m-transh-eval.log'
-jtransup_log = root_path + ''
+jtransup_log = root_path + '/log/ml1m-jtransup_share-eval.log'
 
 u_map_file = dataset_path + '/u_map.dat'
 i_map_file = dataset_path + '/i_map.dat'

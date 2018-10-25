@@ -105,10 +105,6 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                     all_eval_dicts = [train_dict] + [tmp_data[3] for j, tmp_data in enumerate(eval_datasets) if j!=i]
 
                 performances.append( evaluate(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, is_report=is_report))
-
-            pbar = tqdm(total=FLAGS.eval_interval_steps)
-            pbar.set_description("Training")
-            total_loss = 0.0
             
             if trainer.step > 0:
                 is_best = trainer.new_performance(performances[0], performances)
@@ -147,6 +143,9 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                     vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
 
                     vis.plot_many_stack(ndcg_vis_dict, win_name="NDCG@{}".format(FLAGS.topn))
+            pbar = tqdm(total=FLAGS.eval_interval_steps)
+            pbar.set_description("Training")
+            total_loss = 0.0
 
         rating_batch = next(train_iter)
         u, pi, ni = getNegRatings(rating_batch, item_total, all_dicts=all_dicts)

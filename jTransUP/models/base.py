@@ -16,11 +16,13 @@ import jTransUP.models.transE as transe
 import jTransUP.models.transR as transr
 import jTransUP.models.transD as transd
 import jTransUP.models.cofm as cofm
-import jTransUP.models.transUP_bias as transupb
+import jTransUP.models.CKE as cke
+import jTransUP.models.CFKG as cfkg
 
 def get_flags():
     gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm",
-                                                "transe", "transh", "transr", "transd", "cofm", "jtransup" ], "")
+                                                "transe", "transh", "transr", "transd",
+                                                "cfkg", "cke", "cofm", "jtransup" ], "")
     gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "including ratings.csv, r2kg.tsv and a kg dictionary containing kg_hop[0-9].dat")
     gflags.DEFINE_bool(
         "filter_wrong_corrupted",
@@ -34,6 +36,8 @@ def get_flags():
     gflags.DEFINE_integer("num_processes", 4, ".")
 
     gflags.DEFINE_float("learning_rate", 0.001, "Used in optimizer.")
+    gflags.DEFINE_float("norm_lambda", 1.0, "decay of joint model.")
+    gflags.DEFINE_float("kg_lambda", 0.5, "decay of kg model.")
     gflags.DEFINE_integer(
         "early_stopping_steps_to_wait",
         70000,
@@ -80,7 +84,7 @@ def get_flags():
         "ckpt_path", None, "Where to save/load checkpoints. If not set, the same as log_path")
     
     gflags.DEFINE_string(
-        "load_ckpt_file", None, "Where to load pretrained checkpoints.")
+        "load_ckpt_file", None, "Where to load pretrained checkpoints. multiple filenames separated by ':'.")
 
     gflags.DEFINE_boolean(
         "has_visualization",
@@ -119,6 +123,11 @@ def flag_defaults(FLAGS):
     if FLAGS.seed != 0:
         torch.manual_seed(FLAGS.seed)
 
+    if FLAGS.model_type == 'cke':
+        FLAGS.share_embeddings = False
+    elif FLAGS.model_type == 'cfkg':
+        FLAGS.share_embeddings = True
+
 
 def init_model(
         FLAGS,
@@ -126,13 +135,14 @@ def init_model(
         item_total,
         entity_total,
         relation_total,
-        logger):
+        logger,
+        i_map=None,
+        e_map=None,
+        new_map=None):
     # Choose model.
     logger.info("Building model.")
     if FLAGS.model_type == "transup":
         build_model = transup.build_model
-    elif FLAGS.model_type == "transupb":
-        build_model = transupb.build_model
     elif FLAGS.model_type == "bprmf":
         build_model = bprmf.build_model
     elif FLAGS.model_type == "fm":
@@ -147,12 +157,17 @@ def init_model(
         build_model = transd.build_model
     elif FLAGS.model_type == "cofm":
         build_model = cofm.build_model
+    elif FLAGS.model_type == "cke":
+        build_model = cke.build_model
+    elif FLAGS.model_type == "cfkg":
+        build_model = cfkg.build_model
     elif FLAGS.model_type == "jtransup":
         build_model = jtransup.build_model
     else:
         raise NotImplementedError
 
-    model = build_model(FLAGS, user_total, item_total, entity_total, relation_total)
+    model = build_model(FLAGS, user_total, item_total, entity_total, relation_total, 
+    i_map=i_map, e_map=e_map, new_map=new_map)
 
     # Print model size.
     logger.info("Architecture: {}".format(model))

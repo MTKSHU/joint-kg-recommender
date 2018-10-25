@@ -7,7 +7,7 @@ from jTransUP.utils.misc import to_gpu, projection_transH_pytorch
 from jTransUP.models.transH import TransHModel
 from jTransUP.models.transUP import TransUPModel
 
-def build_model(FLAGS, user_total, item_total, entity_total, relation_total):
+def build_model(FLAGS, user_total, item_total, entity_total, relation_total, i_map=None, e_map=None, new_map=None):
     model_cls = jTransUPModel
     return model_cls(
                 L1_flag = FLAGS.L1_flag,
@@ -84,6 +84,9 @@ class jTransUPModel(nn.Module):
             normalize_item_emb = F.normalize(self.item_embeddings.weight.data, p=2, dim=1)
             self.item_embeddings.weight.data = normalize_item_emb
             self.item_embeddings = to_gpu(self.item_embeddings)
+        
+        # to be consistent with transUP
+        self.pref_embeddings = self.rel_embeddings
 
     def forward(self, ratings, triples, is_rec=True):
         

@@ -5,7 +5,7 @@ from torch.autograd import Variable as V
 
 from jTransUP.utils.misc import to_gpu, projection_transD_pytorch_samesize
 
-def build_model(FLAGS, user_total, item_total, entity_total, relation_total):
+def build_model(FLAGS, user_total, item_total, entity_total, relation_total, i_map=None, e_map=None, new_map=None):
     model_cls = TransHModel
     return model_cls(
                 L1_flag = FLAGS.L1_flag,

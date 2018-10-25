@@ -242,7 +242,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                 kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=False, is_report=is_report))
 
             if trainer.step > 0:
-                is_best = trainer.new_performance(rec_performances[0], rec_performances)
+                is_best = trainer.new_performance(kg_performances[0], kg_performances)
                 # visuliazation
                 if vis is not None:
                     vis.plot_many_stack({'Rec Train Loss': rec_total_loss, 'KG Train Loss':kg_total_loss},
@@ -324,9 +324,8 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             # Calculate loss.
             losses = bprLoss(pos_score, neg_score, target=trainer.model_target)
             
-            if FLAGS.model_type == "transup":
+            if FLAGS.model_type in ["transup", "jtransup"]:
                 losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight)
-
         # kg train
         else :
             triple_batch = next(triple_train_iter)
@@ -368,14 +367,15 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                 losses += loss.orthogonalLoss(rel_embeddings, norm_embeddings)
 
             losses = losses + loss.normLoss(ent_embeddings) + loss.normLoss(rel_embeddings)
-        
+            losses = FLAGS.kg_lambda * losses
         # align loss if not share embeddings
-        if not FLAGS.share_embeddings:
+        if not FLAGS.share_embeddings and FLAGS.model_type not in ['cke']:
             e_var = to_gpu(V(torch.LongTensor(e_ids)))
             i_var = to_gpu(V(torch.LongTensor(i_ids)))
             ent_embeddings = model.ent_embeddings(e_var)
             item_embeddings = model.item_embeddings(i_var)
-            losses += loss.pNormLoss(ent_embeddings, item_embeddings, L1_flag=FLAGS.L1_flag)
+            losses += FLAGS.norm_lambda * loss.pNormLoss(ent_embeddings, item_embeddings, L1_flag=FLAGS.L1_flag)
+        
 
         # Backward pass.
         losses.backward()
@@ -449,17 +449,23 @@ def run(only_forward=False):
         item_entity_total = len(ikg_map)
         entity_total = item_entity_total
         item_total = item_entity_total
-    joint_model = init_model(FLAGS, user_total, item_total, entity_total, relation_total, logger)
+
+    joint_model = init_model(FLAGS, user_total, item_total, entity_total, relation_total, logger, i_map=i_map, e_map=e_map, new_map=ikg_map)
 
     # epoch_length = math.ceil( (triple_train_total+rating_train_total) / FLAGS.batch_size )
     epoch_length = math.ceil( float(rating_train_total) / FLAGS.joint_ratio / FLAGS.batch_size )
     
     trainer = ModelTrainer(joint_model, logger, epoch_length, FLAGS)
 
+    ml1m_ckpt_path = os.path.join(FLAGS.log_path, 'tuned_ml1m')
     if FLAGS.load_ckpt_file is not None and FLAGS.share_embeddings:
-        trainer.loadEmbedding(FLAGS.load_ckpt_file, joint_model.state_dict(), e_remap=e_map, i_remap=i_map)
+        load_ckpt_files = FLAGS.load_ckpt_file.split(':')
+        for filename in load_ckpt_files:
+            trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, filename), joint_model.state_dict(), e_remap=e_map, i_remap=i_map)
     elif FLAGS.load_ckpt_file is not None:
-        trainer.loadEmbedding(FLAGS.load_ckpt_file, joint_model.state_dict())
+        load_ckpt_files = FLAGS.load_ckpt_file.split(':')
+        for filename in load_ckpt_files:
+            trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, filename), joint_model.state_dict())
     
     # Do an evaluation-only run.
     if only_forward:

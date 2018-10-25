@@ -161,6 +161,20 @@ class ModelTrainer(object):
         # 2. overwrite entries in the existing state dict
         model_dict.update(pretrained_dict)
 
+        '''
+        if 'pref_embeddings.weight' in old_model_state_dict and 'rel_embeddings.weight' in model_dict and len(old_model_state_dict['pref_embeddings.weight'])==len(self.model.rel_embeddings.weight.data):
+            loaded_embeddings = old_model_state_dict['pref_embeddings.weight']
+            del (model_dict['rel_embeddings.weight'])
+            self.model.rel_embeddings.weight.data[:, :] = loaded_embeddings[:, :]
+            self.logger.info('Restored ' + str(len(loaded_embeddings)) + ' pref from checkpoint.')
+        
+        if 'norm_embeddings.weight' in old_model_state_dict and 'norm_embeddings.weight' in model_dict and len(old_model_state_dict['norm_embeddings.weight'])==len(self.model.norm_embeddings.weight.data):
+            loaded_embeddings = old_model_state_dict['norm_embeddings.weight']
+            del (model_dict['norm_embeddings.weight'])
+            del (pretrained_dict['norm_embeddings.weight'])
+            self.model.norm_embeddings.weight.data[:, :] = loaded_embeddings[:, :]
+            self.logger.info('Restored ' + str(len(loaded_embeddings)) + ' pre norm from checkpoint.')
+        '''
         # restore entities
         if e_remap is not None and 'ent_embeddings.weight' in model_dict and 'ent_embeddings.weight' in embedding_names:
             loaded_embeddings = model_dict['ent_embeddings.weight']
