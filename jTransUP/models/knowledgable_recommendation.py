@@ -455,8 +455,10 @@ def run(only_forward=False):
 
     joint_model = init_model(FLAGS, user_total, item_total, entity_total, relation_total, logger, i_map=i_map, e_map=e_map, new_map=ikg_map)
 
-    # epoch_length = math.ceil( (triple_train_total+rating_train_total) / FLAGS.batch_size )
-    epoch_length = math.ceil( float(rating_train_total) / FLAGS.joint_ratio / FLAGS.batch_size )
+    triple_epoch_length = math.ceil( float(triple_train_total) / (1-FLAGS.joint_ratio) / FLAGS.batch_size )
+    rating_epoch_length = math.ceil( float(rating_train_total) / FLAGS.joint_ratio / FLAGS.batch_size )
+
+    epoch_length = max(triple_epoch_length, rating_epoch_length)
     
     trainer = ModelTrainer(joint_model, logger, epoch_length, FLAGS)
 

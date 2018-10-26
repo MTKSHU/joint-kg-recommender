@@ -12,7 +12,8 @@ def build_model(FLAGS, user_total, item_total, entity_total, relation_total, i_m
                 embedding_size = FLAGS.embedding_size,
                 user_total = user_total,
                 item_total = item_total,
-                preference_total = FLAGS.num_preferences
+                preference_total = FLAGS.num_preferences,
+                use_st_gumbel = FLAGS.use_st_gumbel
     )
 
 class TransUPModel(nn.Module):
@@ -21,7 +22,8 @@ class TransUPModel(nn.Module):
                 embedding_size,
                 user_total,
                 item_total,
-                preference_total
+                preference_total,
+                use_st_gumbel
                 ):
         super(TransUPModel, self).__init__()
         self.L1_flag = L1_flag
@@ -30,6 +32,7 @@ class TransUPModel(nn.Module):
         self.item_total = item_total
         self.preference_total = preference_total
         self.is_pretrained = False
+        self.use_st_gumbel = use_st_gumbel
 
         user_weight = torch.FloatTensor(self.user_total, self.embedding_size)
         item_weight = torch.FloatTensor(self.item_total, self.embedding_size)
@@ -66,10 +69,8 @@ class TransUPModel(nn.Module):
     def forward(self, u_ids, i_ids):
         u_e = self.user_embeddings(u_ids)
         i_e = self.item_embeddings(i_ids)
-        # use item and user embedding to compute preference distribution
-        pre_probs = torch.matmul(u_e + i_e, torch.t(self.pref_embeddings.weight)) / 2
-        r_e = torch.matmul(pre_probs, self.pref_embeddings.weight)
-        norm = torch.matmul(pre_probs, self.norm_embeddings.weight)
+        
+        r_e, norm = self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
 
         proj_u_e = projection_transH_pytorch(u_e, norm)
         proj_i_e = projection_transH_pytorch(i_e, norm)
@@ -87,13 +88,9 @@ class TransUPModel(nn.Module):
         u_e = u.expand(self.item_total, batch_size, self.embedding_size).permute(1, 0, 2)
         i_e = self.item_embeddings.weight.expand(batch_size, self.item_total, self.embedding_size)
 
-        # batch * item * pref
-        pre_probs = torch.matmul(u_e + i_e, torch.t(self.pref_embeddings.weight)) / 2
         # batch * item * dim
-        r_e = torch.matmul(pre_probs, self.pref_embeddings.weight)
-        norm = torch.matmul(pre_probs, self.norm_embeddings.weight)
+        r_e, norm = self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
 
-        # batch * item * dim
         proj_u_e = projection_transH_pytorch(u_e, norm)
         proj_i_e = projection_transH_pytorch(i_e, norm)
 
@@ -104,16 +101,73 @@ class TransUPModel(nn.Module):
             score = torch.sum((proj_u_e + r_e - proj_i_e) ** 2, 2)
         return score
     
-    def getPreferences(self, u_id, i_ids):
-        item_num = len(i_ids)
-        # item_num * dim
-        u_e = self.user_embeddings(u_id.expand(item_num))
-        # item_num * dim
-        i_e = self.item_embeddings(i_ids)
-        # item_num * relation_total
+    # u_e, i_e : batch * dim or batch * item * dim
+    def getPreferences(self, u_e, i_e, use_st_gumbel=False):
+        # use item and user embedding to compute preference distribution
+        # pre_probs: batch * rel, or batch * item * rel
         pre_probs = torch.matmul(u_e + i_e, torch.t(self.pref_embeddings.weight)) / 2
+        if use_st_gumbel:
+            pre_probs = self.st_gumbel_softmax(pre_probs)
 
-        return pre_probs
+        r_e = torch.matmul(pre_probs, self.pref_embeddings.weight)
+        norm = torch.matmul(pre_probs, self.norm_embeddings.weight)
+
+        return r_e, norm
+    
+    # batch or batch * item
+    def convert_to_one_hot(self, indices, num_classes):
+        """
+        Args:
+            indices (Variable): A vector containing indices,
+                whose size is (batch_size,).
+            num_classes (Variable): The number of classes, which would be
+                the second dimension of the resulting one-hot matrix.
+        Returns:
+            result: The one-hot matrix of size (batch_size, num_classes).
+        """
+
+        old_shape = indices.shape
+        new_shape = torch.Size([i for i in old_shape] + [num_classes])
+        indices = indices.unsqueeze(len(old_shape))
+
+        one_hot = V(indices.data.new(new_shape).zero_()
+                        .scatter_(len(old_shape), indices.data, 1))
+        return one_hot
+
+
+    def masked_softmax(self, logits):
+        eps = 1e-20
+        probs = F.softmax(logits, dim=len(logits.shape)-1)
+        return probs
+
+    def st_gumbel_softmax(self, logits, temperature=1.0):
+        """
+        Return the result of Straight-Through Gumbel-Softmax Estimation.
+        It approximates the discrete sampling via Gumbel-Softmax trick
+        and applies the biased ST estimator.
+        In the forward propagation, it emits the discrete one-hot result,
+        and in the backward propagation it approximates the categorical
+        distribution via smooth Gumbel-Softmax distribution.
+        Args:
+            logits (Variable): A un-normalized probability values,
+                which has the size (batch_size, num_classes)
+            temperature (float): A temperature parameter. The higher
+                the value is, the smoother the distribution is.
+        Returns:
+            y: The sampled output, which has the property explained above.
+        """
+
+        eps = 1e-20
+        u = logits.data.new(*logits.size()).uniform_()
+        gumbel_noise = V(-torch.log(-torch.log(u + eps) + eps))
+        y = logits + gumbel_noise
+        y = self.masked_softmax(logits=y / temperature)
+        y_argmax = y.max(len(y.shape)-1)[1]
+        y_hard = self.convert_to_one_hot(
+            indices=y_argmax,
+            num_classes=y.size(len(y.shape)-1)).float()
+        y = (y_hard - y).detach() + y
+        return y
     
     def disable_grad(self):
         for name, param in self.named_parameters():

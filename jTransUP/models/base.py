@@ -28,10 +28,8 @@ def get_flags():
         "filter_wrong_corrupted",
         True,
         "If set to True, filter test samples from train and validations.")
-    gflags.DEFINE_bool(
-        "share_embeddings",
-        False,
-        "")
+    gflags.DEFINE_bool("share_embeddings", False, "")
+    gflags.DEFINE_bool("use_st_gumbel", False, "")
     gflags.DEFINE_integer("max_queue", 10, ".")
     gflags.DEFINE_integer("num_processes", 4, ".")
 
