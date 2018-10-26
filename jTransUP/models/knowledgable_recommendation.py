@@ -84,13 +84,13 @@ def evaluateRec(FLAGS, model, eval_iter, eval_dict, all_dicts, i_map, logger, ev
             u_id = pred_tuple[0]
             top_ids = pred_tuple[1]
             gold_ids = list(pred_tuple[2])
-            if FLAGS.model_type in ["transup", "jtransup"]:
+            if FLAGS.model_type in ["transup", "jtransup", "cjtransup"]:
                 for d in all_dicts:
                     gold_ids += d[u_id]
                 u_var = to_gpu(V(torch.LongTensor([u_id])))
                 i_var = to_gpu(V(torch.LongTensor(gold_ids)))
                 # item_num * relation_total
-                probs = model.getPreferences(u_var, i_var)
+                probs, _, _ = model.getPreferences(u_var, i_var, use_st_gumbel=FLAGS.use_st_gumbel)
                 max_rel_index = torch.max(probs, 1)[1]
                 gold_strs = ",".join(["{}({})".format(ir[0], ir[1]) for ir in zip(gold_ids, max_rel_index.data.tolist())])
             else:
@@ -330,8 +330,8 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             # Calculate loss.
             losses = bprLoss(pos_score, neg_score, target=trainer.model_target)
             
-            if FLAGS.model_type in ["transup", "jtransup"]:
-                losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight)
+            if FLAGS.model_type in ["transup", "jtransup", "cjtransup"]:
+                losses += orthogonalLoss(model.pref_embeddings.weight, model.pref_norm_embeddings.weight)
         # kg train
         else :
             triple_batch = next(triple_train_iter)
@@ -365,7 +365,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             
             ent_embeddings = model.ent_embeddings(torch.cat([ph_var, pt_var, nh_var, nt_var]))
             rel_embeddings = model.rel_embeddings(torch.cat([pr_var, nr_var]))
-            if FLAGS.model_type == "jtransup":
+            if FLAGS.model_type in ["jtransup", "cjtransup"]:
                 norm_embeddings = model.norm_embeddings(torch.cat([pr_var, nr_var]))
                 losses += loss.orthogonalLoss(rel_embeddings, norm_embeddings)
 
@@ -467,10 +467,12 @@ def run(only_forward=False):
         load_ckpt_files = FLAGS.load_ckpt_file.split(':')
         for filename in load_ckpt_files:
             trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, filename), joint_model.state_dict(), e_remap=e_map, i_remap=i_map)
+        model.is_pretrained = True
     elif FLAGS.load_ckpt_file is not None:
         load_ckpt_files = FLAGS.load_ckpt_file.split(':')
         for filename in load_ckpt_files:
             trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, filename), joint_model.state_dict())
+        model.is_pretrained = True
     
     # Do an evaluation-only run.
     if only_forward:

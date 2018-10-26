@@ -11,6 +11,7 @@ import jTransUP.models.transUP as transup
 import jTransUP.models.bprmf as bprmf
 import jTransUP.models.transH as transh
 import jTransUP.models.jTransUP as jtransup
+import jTransUP.models.jTransUP_cke as cjtransup
 import jTransUP.models.fm as fm
 import jTransUP.models.transE as transe
 import jTransUP.models.transR as transr
@@ -22,7 +23,7 @@ import jTransUP.models.CFKG as cfkg
 def get_flags():
     gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm",
                                                 "transe", "transh", "transr", "transd",
-                                                "cfkg", "cke", "cofm", "jtransup" ], "")
+                                                "cfkg", "cke", "cofm", "jtransup", "cjtransup" ], "")
     gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "including ratings.csv, r2kg.tsv and a kg dictionary containing kg_hop[0-9].dat")
     gflags.DEFINE_bool(
         "filter_wrong_corrupted",
@@ -122,7 +123,7 @@ def flag_defaults(FLAGS):
     if FLAGS.seed != 0:
         torch.manual_seed(FLAGS.seed)
 
-    if FLAGS.model_type == 'cke':
+    if FLAGS.model_type in ['cke', 'cjtransup']:
         FLAGS.share_embeddings = False
     elif FLAGS.model_type == 'cfkg':
         FLAGS.share_embeddings = True
@@ -162,6 +163,8 @@ def init_model(
         build_model = cfkg.build_model
     elif FLAGS.model_type == "jtransup":
         build_model = jtransup.build_model
+    elif FLAGS.model_type == "cjtransup":
+        build_model = cjtransup.build_model
     else:
         raise NotImplementedError
 

@@ -57,13 +57,13 @@ def evaluate(FLAGS, model, eval_iter, eval_dict, all_dicts, logger, eval_descend
             u_id = pred_tuple[0]
             top_ids = pred_tuple[1]
             gold_ids = list(pred_tuple[2])
-            if FLAGS.model_type in ["transup", "jtransup"]:
+            if FLAGS.model_type in ["transup", "jtransup", "cjtransup"]:
                 for d in all_dicts:
                     gold_ids += d[u_id]
                 u_var = to_gpu(V(torch.LongTensor([u_id])))
                 i_var = to_gpu(V(torch.LongTensor(gold_ids)))
                 # item_num * relation_total
-                probs = model.getPreferences(u_var, i_var)
+                probs, _, _ = model.getPreferences(u_var, i_var)
                 max_rel_index = torch.max(probs, 1)[1]
                 gold_strs = ",".join(["{}({})".format(ir[0], ir[1]) for ir in zip(gold_ids, max_rel_index.data.tolist())])
             else:
@@ -174,7 +174,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
         if FLAGS.model_type in ["transup","transupb"]:
             user_embeddings = model.user_embeddings(u_var)
             item_embeddings = model.item_embeddings(torch.cat([pi_var, ni_var]))
-            losses += orthogonalLoss(model.pref_embeddings.weight, model.norm_embeddings.weight) + normLoss(user_embeddings) + normLoss(item_embeddings) + normLoss(model.pref_embeddings.weight)
+            losses += orthogonalLoss(model.pref_embeddings.weight, model.pref_norm_embeddings.weight) + normLoss(user_embeddings) + normLoss(item_embeddings) + normLoss(model.pref_embeddings.weight)
 
         # Backward pass.
         losses.backward()
@@ -234,8 +234,11 @@ def run(only_forward=False):
     model = init_model(FLAGS, user_total, item_total, 0, 0, logger)
     epoch_length = math.ceil( train_total / FLAGS.batch_size )
     trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
+
     if FLAGS.load_ckpt_file is not None:
-        trainer.loadEmbedding(FLAGS.load_ckpt_file, model.state_dict(), cpu=not USE_CUDA)
+        ml1m_ckpt_path = os.path.join(FLAGS.log_path, 'tuned_ml1m')
+        trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, FLAGS.load_ckpt_file), model.state_dict(), cpu=not USE_CUDA)
+        model.is_pretrained = True
 
     # Do an evaluation-only run.
     if only_forward:

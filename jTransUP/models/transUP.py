@@ -53,24 +53,24 @@ class TransUPModel(nn.Module):
         self.item_embeddings.weight.data = normalize_item_emb
         # init preference parameters
         self.pref_embeddings = nn.Embedding(self.preference_total, self.embedding_size)
-        self.norm_embeddings = nn.Embedding(self.preference_total, self.embedding_size)
+        self.pref_norm_embeddings = nn.Embedding(self.preference_total, self.embedding_size)
         self.pref_embeddings.weight = nn.Parameter(pref_weight)
-        self.norm_embeddings.weight = nn.Parameter(norm_weight)
+        self.pref_norm_embeddings.weight = nn.Parameter(norm_weight)
         normalize_pref_emb = F.normalize(self.pref_embeddings.weight.data, p=2, dim=1)
-        normalize_norm_emb = F.normalize(self.norm_embeddings.weight.data, p=2, dim=1)
+        normalize_norm_emb = F.normalize(self.pref_norm_embeddings.weight.data, p=2, dim=1)
         self.pref_embeddings.weight.data = normalize_pref_emb
-        self.norm_embeddings.weight.data = normalize_norm_emb
+        self.pref_norm_embeddings.weight.data = normalize_norm_emb
 
         self.user_embeddings = to_gpu(self.user_embeddings)
         self.item_embeddings = to_gpu(self.item_embeddings)
         self.pref_embeddings = to_gpu(self.pref_embeddings)
-        self.norm_embeddings = to_gpu(self.norm_embeddings)
+        self.pref_norm_embeddings = to_gpu(self.pref_norm_embeddings)
 
     def forward(self, u_ids, i_ids):
         u_e = self.user_embeddings(u_ids)
         i_e = self.item_embeddings(i_ids)
         
-        r_e, norm = self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
+        _, r_e, norm = self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
 
         proj_u_e = projection_transH_pytorch(u_e, norm)
         proj_i_e = projection_transH_pytorch(i_e, norm)
@@ -89,7 +89,7 @@ class TransUPModel(nn.Module):
         i_e = self.item_embeddings.weight.expand(batch_size, self.item_total, self.embedding_size)
 
         # batch * item * dim
-        r_e, norm = self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
+        _, r_e, norm = self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
 
         proj_u_e = projection_transH_pytorch(u_e, norm)
         proj_i_e = projection_transH_pytorch(i_e, norm)
@@ -110,9 +110,9 @@ class TransUPModel(nn.Module):
             pre_probs = self.st_gumbel_softmax(pre_probs)
 
         r_e = torch.matmul(pre_probs, self.pref_embeddings.weight)
-        norm = torch.matmul(pre_probs, self.norm_embeddings.weight)
+        norm = torch.matmul(pre_probs, self.pref_norm_embeddings.weight)
 
-        return r_e, norm
+        return pre_probs, r_e, norm
     
     # batch or batch * item
     def convert_to_one_hot(self, indices, num_classes):

@@ -59,7 +59,7 @@ class coFM(nn.Module):
         self.user_bias = to_gpu(self.user_bias)
         self.item_bias = to_gpu(self.item_bias)
 
-        self.bias = to_gpu(nn.Parameter(torch.FloatTensor([0.0])))
+        self.bias = nn.Parameter(to_gpu(torch.FloatTensor([0.0])))
 
         # trane
         

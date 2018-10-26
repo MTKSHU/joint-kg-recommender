@@ -263,8 +263,11 @@ def run(only_forward=False):
     epoch_length = math.ceil( train_total / FLAGS.batch_size )
     trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
 
+    # todo : load ckpt full path
     if FLAGS.load_ckpt_file is not None:
-        trainer.loadEmbedding(FLAGS.load_ckpt_file, model.state_dict(), cpu=not USE_CUDA)
+        ml1m_ckpt_path = os.path.join(FLAGS.log_path, 'tuned_ml1m')
+        trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, FLAGS.load_ckpt_file), model.state_dict(), cpu=not USE_CUDA)
+        model.is_pretrained = True
 
     # Do an evaluation-only run.
     if only_forward:

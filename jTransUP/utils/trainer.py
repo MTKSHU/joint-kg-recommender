@@ -161,6 +161,7 @@ class ModelTrainer(object):
         # 2. overwrite entries in the existing state dict
         model_dict.update(pretrained_dict)
 
+        # for cke load
         if 'ent_embeddings.weight' in old_model_state_dict and 'ent_embeddings.weight' in model_dict and len(old_model_state_dict['ent_embeddings.weight'])+1 == len(self.model.ent_embeddings.weight.data):
 
             loaded_embeddings = old_model_state_dict['ent_embeddings.weight']
@@ -191,6 +192,17 @@ class ModelTrainer(object):
                 self.model.item_embeddings.weight.data[mapped_index, :] = loaded_embeddings[index, :]
                 count += 1
             self.logger.info('Restored ' + str(count) + ' items from checkpoint.')
+            # for cofm
+            if 'item_bias.weight' in model_dict and 'item_bias.weight' in pretrained_dict:
+                loaded_embeddings = model_dict['item_bias.weight']
+                del (model_dict['item_bias.weight'])
+
+                count = 0
+                for index in i_remap:
+                    mapped_index = i_remap[index]
+                    self.model.item_bias.weight.data[mapped_index] = loaded_embeddings[index]
+                    count += 1
+                self.logger.info('Restored ' + str(count) + ' items bias from checkpoint.')
 
         # 3. load the new state dict
         self.model.load_state_dict(model_dict, strict=False)
