@@ -166,18 +166,19 @@ class CKE(nn.Module):
         proj_t_e = projection_transR_pytorch(t_e, proj_e)
         c_h_e = proj_t_e - r_e
         
-        # batch * entity * dim
-        c_h_expand = c_h_e.expand(ent_total, batch_size, dim).permute(1, 0, 2)
+        score = []
+        # entity * dim
+        for i, single_proj in enumerate(proj_e):
+            single_ent_e = projection_transR_pytorch(self.ent_embeddings.weight, single_proj)
+            che_expand = c_h_e[i].expand(self.ent_total, self.embedding_size)
+            # entity
+            if self.L1_flag:
+                single_score = torch.sum(torch.abs(che_expand-single_ent_e), 1)
+            else:
+                single_score = torch.sum((che_expand-single_ent_e) ** 2, 1)
+            score.append(single_score)
 
-        # batch * entity * dim
-        proj_ent_expand = projection_transR_pytorch_batch(all_e, proj_e)
-
-        # batch * entity
-        if self.L1_flag:
-            score = torch.sum(torch.abs(c_h_expand-proj_ent_expand), 2)
-        else:
-            score = torch.sum((c_h_expand-proj_ent_expand) ** 2, 2)
-        return score
+        return torch.cat(score, dim=0)
     
     def evaluateTail(self, h, r, all_e_ids=None):
         batch_size = len(h)
@@ -189,18 +190,19 @@ class CKE(nn.Module):
         # batch* dim*dim
         proj_e = self.proj_embeddings(r)
         # batch * dim
-        proj_h_e = projection_transH_pytorch(h_e, proj_e)
+        proj_h_e = projection_transR_pytorch(h_e, proj_e)
         c_t_e = proj_h_e + r_e
         
-        # batch * entity * dim
-        c_t_expand = c_t_e.expand(ent_total, batch_size, dim).permute(1, 0, 2)
-
-        # batch * entity * dim
-        proj_ent_expand = projection_transR_pytorch_batch(all_e, proj_e)
-
-        # batch * entity
-        if self.L1_flag:
-            score = torch.sum(torch.abs(c_t_expand-proj_ent_expand), 2)
-        else:
-            score = torch.sum((c_t_expand-proj_ent_expand) ** 2, 2)
-        return score
+        score = []
+        # entity * dim
+        for i, single_proj in enumerate(proj_e):
+            single_ent_e = projection_transR_pytorch(self.ent_embeddings.weight, single_proj)
+            cte_expand = c_t_e[i].expand(self.ent_total, self.embedding_size)
+            # entity
+            if self.L1_flag:
+                single_score = torch.sum(torch.abs(cte_expand-single_ent_e), 1)
+            else:
+                single_score = torch.sum((cte_expand-single_ent_e) ** 2, 1)
+            score.append(single_score)
+            
+        return torch.cat(score, dim=0)

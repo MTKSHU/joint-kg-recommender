@@ -90,6 +90,7 @@ def get_flags():
         "has_visualization",
         True,
         "if set True, use visdom for visualization.")
+    gflags.DEFINE_integer("visualization_port", 8097, "")
     # todo: only eval when no train.dat when load data
     gflags.DEFINE_boolean(
         "eval_only_mode",

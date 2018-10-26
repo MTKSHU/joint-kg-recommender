@@ -24,14 +24,6 @@ def projection_transR_pytorch(original, proj_matrix):
     proj_matrix = proj_matrix.view(-1, embedding_size, embedding_size)
     return torch.matmul(proj_matrix, original).view(-1, embedding_size)
 
-# original: E*d2, proj: b*d1*d2
-def projection_transR_pytorch_batch(original, proj_matrix):
-    embedding_size = original.shape[-1]
-    original_e = original.unsqueeze(2)
-    proj_matrix = proj_matrix.view(-1, embedding_size, embedding_size)
-    proj_matrix_e = proj_matrix.unsqueeze(1)
-    return torch.matmul(proj_matrix_e, original_e).squeeze()
-
 # batch * dim
 def projection_transD_pytorch_samesize(entity_embedding, entity_projection, relation_projection):
 	return entity_embedding + torch.sum(entity_embedding * entity_projection, dim=len(entity_embedding.size())-1, keepdim=True) * relation_projection

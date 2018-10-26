@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable as V
 
-from jTransUP.utils.misc import to_gpu, projection_transR_pytorch, projection_transR_pytorch_batch
+from jTransUP.utils.misc import to_gpu, projection_transR_pytorch
 
 def build_model(FLAGS, user_total, item_total, entity_total, relation_total, i_map=None, e_map=None, new_map=None):
     model_cls = TransRModel
@@ -27,6 +27,7 @@ class TransRModel(nn.Module):
         self.ent_total = ent_total
         self.rel_total = rel_total
         self.is_pretrained = False
+        self.max_entity_batch = 10
 
         ent_weight = torch.FloatTensor(self.ent_total, self.embedding_size)
         rel_weight = torch.FloatTensor(self.rel_total, self.embedding_size)
@@ -87,18 +88,19 @@ class TransRModel(nn.Module):
         proj_t_e = projection_transR_pytorch(t_e, proj_e)
         c_h_e = proj_t_e - r_e
         
-        # batch * entity * dim
-        c_h_expand = c_h_e.expand(self.ent_total, batch_size, self.embedding_size).permute(1, 0, 2)
+        score = []
+        # entity * dim
+        for i, single_proj in enumerate(proj_e):
+            single_ent_e = projection_transR_pytorch(self.ent_embeddings.weight, single_proj)
+            che_expand = c_h_e[i].expand(self.ent_total, self.embedding_size)
+            # entity
+            if self.L1_flag:
+                single_score = torch.sum(torch.abs(che_expand-single_ent_e), 1)
+            else:
+                single_score = torch.sum((che_expand-single_ent_e) ** 2, 1)
+            score.append(single_score)
 
-        # batch * entity * dim
-        proj_ent_expand = projection_transR_pytorch_batch(self.ent_embeddings.weight, proj_e)
-
-        # batch * entity
-        if self.L1_flag:
-            score = torch.sum(torch.abs(c_h_expand-proj_ent_expand), 2)
-        else:
-            score = torch.sum((c_h_expand-proj_ent_expand) ** 2, 2)
-        return score
+        return torch.cat(score, dim=0)
     
     def evaluateTail(self, h, r):
         batch_size = len(h)
@@ -108,18 +110,18 @@ class TransRModel(nn.Module):
         # batch* dim*dim
         proj_e = self.proj_embeddings(r)
         # batch * dim
-        proj_h_e = projection_transH_pytorch(h_e, proj_e)
+        proj_h_e = projection_transR_pytorch(h_e, proj_e)
         c_t_e = proj_h_e + r_e
         
-        # batch * entity * dim
-        c_t_expand = c_t_e.expand(self.ent_total, batch_size, self.embedding_size).permute(1, 0, 2)
-
-        # batch * entity * dim
-        proj_ent_expand = projection_transR_pytorch_batch(self.ent_embeddings.weight, proj_e)
-
-        # batch * entity
-        if self.L1_flag:
-            score = torch.sum(torch.abs(c_t_expand-proj_ent_expand), 2)
-        else:
-            score = torch.sum((c_t_expand-proj_ent_expand) ** 2, 2)
-        return score
+        score = []
+        # entity * dim
+        for i, single_proj in enumerate(proj_e):
+            single_ent_e = projection_transR_pytorch(self.ent_embeddings.weight, single_proj)
+            cte_expand = c_t_e[i].expand(self.ent_total, self.embedding_size)
+            # entity
+            if self.L1_flag:
+                single_score = torch.sum(torch.abs(cte_expand-single_ent_e), 1)
+            else:
+                single_score = torch.sum((cte_expand-single_ent_e) ** 2, 1)
+            score.append(single_score)
+        return torch.cat(score, dim=0)

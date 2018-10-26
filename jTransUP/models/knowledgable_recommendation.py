@@ -403,7 +403,7 @@ def run(only_forward=False):
     # set visualization
     vis = None
     if FLAGS.has_visualization:
-        vis = Visualizer(env=FLAGS.experiment_name)
+        vis = Visualizer(env=FLAGS.experiment_name, port=FLAGS.visualization_port)
         vis.log(json.dumps(FLAGS.FlagValuesDict(), indent=4, sort_keys=True),
                 win_name="Parameter")
 
