@@ -52,3 +52,11 @@ class BPRMF(nn.Module):
         u_e = self.user_embeddings(u_ids)
 
         return torch.matmul(u_e, self.item_embeddings.weight.t())
+    
+    def disable_grad(self):
+        for name, param in self.named_parameters():
+            param.requires_grad=False
+    
+    def enable_grad(self):
+        for name, param in self.named_parameters():
+            param.requires_grad=True

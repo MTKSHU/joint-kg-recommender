@@ -58,6 +58,8 @@ def evaluateRec(FLAGS, model, eval_iter, eval_dict, all_dicts, i_map, logger, ev
         all_i_var = to_gpu(V(torch.LongTensor(all_i_ids)))
 
     model.eval()
+    model.disable_grad()
+
     results = []
     for u_ids in eval_iter:
         u_var = to_gpu(V(torch.LongTensor(u_ids)))
@@ -94,7 +96,7 @@ def evaluateRec(FLAGS, model, eval_iter, eval_dict, all_dicts, i_map, logger, ev
             else:
                 gold_strs = ",".join([str(i) for i in gold_ids])
             logger.info("user:{}\tgold:{}\ttop:{}".format(u_id, gold_strs, ",".join([str(i) for i in top_ids])))
-
+    model.enable_grad()
     return f1, p, r, hit, ndcg
 
 def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eval_tail_dict, all_head_dicts, all_tail_dicts, e_map, logger, eval_descending=True, is_report=False):
@@ -105,6 +107,7 @@ def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eva
     pbar.set_description("Run Eval")
 
     model.eval()
+    model.disable_grad()
 
     all_e_var = None
     if FLAGS.share_embeddings:
@@ -179,7 +182,7 @@ def evaluateKG(FLAGS, model, eval_head_iter, eval_tail_iter, eval_head_dict, eva
             r = result[2][1]
             gold_t = result[3]
             logger.info("T\t{}\t{}\t{}\t{}".format(h, gold_t, r, hit))
-
+    model.enable_grad()
     return avg_hit, avg_mean_rank
 
 def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset, rating_eval_datasets, triple_eval_datasets, e_map, i_map, ikg_map, logger, vis=None, is_report=False):
@@ -208,6 +211,8 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
     pbar = None
     rec_total_loss = 0.0
     kg_total_loss = 0.0
+    model.train()
+    model.enable_grad()
     for _ in range(trainer.step, FLAGS.training_steps):
 
         if FLAGS.early_stopping_steps_to_wait > 0 and (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
@@ -292,10 +297,14 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
                     vis.plot_many_stack(meanrank_dict, win_name="KG MeanRank")
 
+            # set model in training mode
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
             rec_total_loss = 0.0
             kg_total_loss = 0.0
+    
+            model.train()
+            model.enable_grad()
 
         # recommendation train
         if trainer.step % 10 < step_to_switch :
@@ -311,9 +320,6 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             u_var = to_gpu(V(torch.LongTensor(u)))
             pi_var = to_gpu(V(torch.LongTensor(pi)))
             ni_var = to_gpu(V(torch.LongTensor(ni)))
-
-            # set model in training mode
-            model.train()
 
             trainer.optimizer_zero_grad()
 
@@ -345,9 +351,6 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             nh_var = to_gpu(V(torch.LongTensor(nh)))
             nt_var = to_gpu(V(torch.LongTensor(nt)))
             nr_var = to_gpu(V(torch.LongTensor(nr)))
-
-            # set model in training mode
-            model.train()
 
             trainer.optimizer_zero_grad()
 

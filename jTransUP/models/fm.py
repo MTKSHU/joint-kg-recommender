@@ -77,3 +77,11 @@ class FM(nn.Module):
         y_e = self.bias.expand(batch_size, self.item_total) + u_b_e + i_b_e + torch.matmul(u_e, self.item_embeddings.weight.t())
 
         return y_e
+    
+    def disable_grad(self):
+        for name, param in self.named_parameters():
+            param.requires_grad=False
+    
+    def enable_grad(self):
+        for name, param in self.named_parameters():
+            param.requires_grad=True

@@ -19,14 +19,22 @@ def projection_transH_pytorch(original, norm):
     return original - torch.sum(original * norm, dim=len(original.size())-1, keepdim=True) * norm
 
 def projection_transR_pytorch(original, proj_matrix):
-    embedding_size = original.shape[-1]
-    original = original.view(-1, embedding_size, 1)
-    proj_matrix = proj_matrix.view(-1, embedding_size, embedding_size)
-    return torch.matmul(proj_matrix, original).view(-1, embedding_size)
+    ent_embedding_size = original.shape[1]
+    rel_embedding_size = proj_matrix.shape[1] // ent_embedding_size
+    original = original.view(-1, ent_embedding_size, 1)
+    proj_matrix = proj_matrix.view(-1, rel_embedding_size, ent_embedding_size)
+    return torch.matmul(proj_matrix, original).view(-1, rel_embedding_size)
+
+# original: E*d2, proj: b*d1*d2
+def projection_transR_pytorch_batch(original, proj_matrix):
+    ent_embedding_size = original.shape[1]
+    rel_embedding_size = proj_matrix.shape[1] // ent_embedding_size
+    proj_matrix = proj_matrix.view(-1, rel_embedding_size, ent_embedding_size)
+    return torch.matmul(proj_matrix, original.transpose(0,1)).transpose(1,2)
 
 # batch * dim
 def projection_transD_pytorch_samesize(entity_embedding, entity_projection, relation_projection):
-	return entity_embedding + torch.sum(entity_embedding * entity_projection, dim=len(entity_embedding.size())-1, keepdim=True) * relation_projection
+    return entity_embedding + torch.sum(entity_embedding * entity_projection, dim=len(entity_embedding.size())-1, keepdim=True) * relation_projection
 
 class Accumulator(object):
     """Accumulator. Makes it easy to keep a trailing list of statistics."""

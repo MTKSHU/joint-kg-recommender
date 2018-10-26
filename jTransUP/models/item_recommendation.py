@@ -32,6 +32,8 @@ def evaluate(FLAGS, model, eval_iter, eval_dict, all_dicts, logger, eval_descend
     pbar.set_description("Run Eval")
 
     model.eval()
+    model.disable_grad()
+
     results = []
     for u_ids in eval_iter:
         u_var = to_gpu(V(torch.LongTensor(u_ids)))
@@ -67,7 +69,7 @@ def evaluate(FLAGS, model, eval_iter, eval_dict, all_dicts, logger, eval_descend
             else:
                 gold_strs = ",".join([str(i) for i in gold_ids])
             logger.info("user:{}\tgold:{}\ttop:{}".format(u_id, gold_strs, ",".join([str(i) for i in top_ids])))
-
+    model.enable_grad()
     return f1, p, r, hit, ndcg
 
 def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
@@ -84,6 +86,8 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
     # New Training Loop
     pbar = None
     total_loss = 0.0
+    model.train()
+    model.enable_grad()
     for _ in range(trainer.step, FLAGS.training_steps):
 
         if FLAGS.early_stopping_steps_to_wait > 0 and (trainer.step - trainer.best_step) > FLAGS.early_stopping_steps_to_wait:
@@ -143,9 +147,13 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                     vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
 
                     vis.plot_many_stack(ndcg_vis_dict, win_name="NDCG@{}".format(FLAGS.topn))
+
+            # set model in training mode
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
             total_loss = 0.0
+            model.train()
+            model.enable_grad()
 
         rating_batch = next(train_iter)
         u, pi, ni = getNegRatings(rating_batch, item_total, all_dicts=all_dicts)
@@ -153,9 +161,6 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
         u_var = to_gpu(V(torch.LongTensor(u)))
         pi_var = to_gpu(V(torch.LongTensor(pi)))
         ni_var = to_gpu(V(torch.LongTensor(ni)))
-
-        # set model in training mode
-        model.train()
 
         trainer.optimizer_zero_grad()
 

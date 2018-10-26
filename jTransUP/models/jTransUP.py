@@ -219,3 +219,11 @@ class jTransUPModel(nn.Module):
         pre_probs = torch.matmul(u_e + i_e, torch.t(self.rel_embeddings.weight)) / 2
 
         return pre_probs
+
+    def disable_grad(self):
+        for name, param in self.named_parameters():
+            param.requires_grad=False
+    
+    def enable_grad(self):
+        for name, param in self.named_parameters():
+            param.requires_grad=True

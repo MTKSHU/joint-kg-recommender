@@ -171,3 +171,12 @@ class CFKG(nn.Module):
         else:
             score = torch.sum((c_t_expand-ent_expand) ** 2, 2)
         return score
+
+    
+    def disable_grad(self):
+        for name, param in self.named_parameters():
+            param.requires_grad=False
+    
+    def enable_grad(self):
+        for name, param in self.named_parameters():
+            param.requires_grad=True
