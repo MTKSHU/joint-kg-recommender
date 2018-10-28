@@ -149,13 +149,13 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                 is_best = trainer.new_performance(performances[0], performances)
                 # visuliazation
                 if vis is not None:
-                    vis.plot_many_stack({'Train Loss': total_loss},
+                    vis.plot_many_stack({'KG Train Loss': total_loss},
                     win_name="Loss Curve")
                     hit_vis_dict = {}
                     meanrank_vis_dict = {}
                     for i, performance in enumerate(performances):
-                        hit_vis_dict['Eval {} Hit'.format(i)] = performance[0]
-                        meanrank_vis_dict['Eval {} MeanRank'.format(i)] = performance[1]
+                        hit_vis_dict['KG Eval {} Hit'.format(i)] = performance[0]
+                        meanrank_vis_dict['KG Eval {} MeanRank'.format(i)] = performance[1]
                     
                     if is_best:
                         log_str = ["Best performances in {} step!".format(trainer.best_step)]
@@ -163,9 +163,9 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                         log_str += ["{} : {}.".format(s, "%.5f" % meanrank_vis_dict[s]) for s in meanrank_vis_dict]
                         vis.log("\n".join(log_str), win_name="Best Performances")
 
-                    vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
+                    vis.plot_many_stack(hit_vis_dict, win_name="KG Hit Ratio@{}".format(FLAGS.topn))
 
-                    vis.plot_many_stack(meanrank_vis_dict, win_name="MeanRank@{}".format(FLAGS.topn))
+                    vis.plot_many_stack(meanrank_vis_dict, win_name="KG MeanRank")
             # set model in training mode
             pbar = tqdm(total=FLAGS.eval_interval_steps)
             pbar.set_description("Training")
@@ -265,8 +265,7 @@ def run(only_forward=False):
 
     # todo : load ckpt full path
     if FLAGS.load_ckpt_file is not None:
-        ml1m_ckpt_path = os.path.join(FLAGS.log_path, 'tuned_ml1m')
-        trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, FLAGS.load_ckpt_file), model.state_dict(), cpu=not USE_CUDA)
+        trainer.loadEmbedding(os.path.join(FLAGS.log_path, FLAGS.load_ckpt_file), model.state_dict(), cpu=not USE_CUDA)
         model.is_pretrained = True
 
     # Do an evaluation-only run.

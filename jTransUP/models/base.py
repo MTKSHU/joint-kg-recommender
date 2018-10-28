@@ -83,7 +83,7 @@ def get_flags():
         "ckpt_path", None, "Where to save/load checkpoints. If not set, the same as log_path")
     
     gflags.DEFINE_string(
-        "load_ckpt_file", None, "Where to load pretrained checkpoints. multiple filenames separated by ':'.")
+        "load_ckpt_file", None, "Where to load pretrained checkpoints under log path. multiple filenames separated by ':'.")
 
     gflags.DEFINE_boolean(
         "has_visualization",

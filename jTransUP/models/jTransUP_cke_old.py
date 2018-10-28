@@ -135,7 +135,7 @@ class CjTransUPModel(nn.Module):
             _, r_e, norm = self.getPreferences(u_e, ie_e, use_st_gumbel=self.use_st_gumbel)
 
             proj_u_e = projection_transH_pytorch(u_e, norm)
-            proj_i_e = projection_transH_pytorch(ie_e, norm)
+            proj_i_e = projection_transH_pytorch(i_e, norm)
 
             if self.L1_flag:
                 score = torch.sum(torch.abs(proj_u_e + r_e - proj_i_e), 1)
@@ -171,17 +171,11 @@ class CjTransUPModel(nn.Module):
         
         i_e = all_i.expand(batch_size, item_total, dim)
 
-        e_ids = self.paddingItems(all_i_ids.data if all_i_ids is not None else self.i_map, self.ent_total-1)
-        e_var = to_gpu(V(torch.LongTensor(e_ids)))
-        e_e = self.ent_embeddings(e_var).expand(batch_size, item_total, dim)
-        
-        ie_e = i_e + e_e
-
         # batch * item * dim
-        _, r_e, norm = self.getPreferences(u_e, ie_e, use_st_gumbel=self.use_st_gumbel)
+        _, r_e, norm = self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
 
         proj_u_e = projection_transH_pytorch(u_e, norm)
-        proj_i_e = projection_transH_pytorch(ie_e, norm)
+        proj_i_e = projection_transH_pytorch(i_e, norm)
 
         # batch * item
         if self.L1_flag:
@@ -254,8 +248,8 @@ class CjTransUPModel(nn.Module):
         if use_st_gumbel:
             pre_probs = self.st_gumbel_softmax(pre_probs)
 
-        r_e = torch.matmul(pre_probs, self.pref_embeddings.weight + self.rel_embeddings.weight) / 2
-        norm = torch.matmul(pre_probs, self.pref_norm_embeddings.weight + self.norm_embeddings.weight) / 2
+        r_e = torch.matmul(pre_probs, self.pref_embeddings.weight + self.rel_embeddings.weight)
+        norm = torch.matmul(pre_probs, self.pref_norm_embeddings.weight + self.norm_embeddings.weight)
 
         return pre_probs, r_e, norm
     
@@ -319,13 +313,8 @@ class CjTransUPModel(nn.Module):
         # item * dim
         u_e = self.user_embeddings(u_id.expand(item_num))
         i_e = self.item_embeddings(i_ids)
-
-        e_ids = self.paddingItems(i_ids.data, self.ent_total-1)
-        e_var = to_gpu(V(torch.LongTensor(e_ids)))
-        e_e = self.ent_embeddings(e_var)
-        ie_e = i_e + e_e
-
-        return self.getPreferences(u_e, ie_e, use_st_gumbel=self.use_st_gumbel)
+        
+        return self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
 
     def disable_grad(self):
         for name, param in self.named_parameters():

@@ -169,6 +169,16 @@ class TransUPModel(nn.Module):
         y = (y_hard - y).detach() + y
         return y
     
+    def reportPreference(self, u_id, i_ids):
+        item_num = len(i_ids)
+        # item_num * dim
+        u_e = self.user_embeddings(u_id.expand(item_num))
+        # item_num * dim
+        i_e = self.item_embeddings(i_ids)
+        # item_num * relation_total
+
+        return self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
+    
     def disable_grad(self):
         for name, param in self.named_parameters():
             param.requires_grad=False

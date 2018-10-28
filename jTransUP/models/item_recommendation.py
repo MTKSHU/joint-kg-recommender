@@ -59,11 +59,12 @@ def evaluate(FLAGS, model, eval_iter, eval_dict, all_dicts, logger, eval_descend
             gold_ids = list(pred_tuple[2])
             if FLAGS.model_type in ["transup", "jtransup", "cjtransup"]:
                 for d in all_dicts:
-                    gold_ids += d[u_id]
+                    gold_ids += list(d.get(u_id, set()))
+                gold_ids += list(eval_dict.get(u_id, set()))
                 u_var = to_gpu(V(torch.LongTensor([u_id])))
                 i_var = to_gpu(V(torch.LongTensor(gold_ids)))
                 # item_num * relation_total
-                probs, _, _ = model.getPreferences(u_var, i_var)
+                probs, _, _ = model.reportPreference(u_var, i_var)
                 max_rel_index = torch.max(probs, 1)[1]
                 gold_strs = ",".join(["{}({})".format(ir[0], ir[1]) for ir in zip(gold_ids, max_rel_index.data.tolist())])
             else:
@@ -114,7 +115,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                 is_best = trainer.new_performance(performances[0], performances)
                 # visuliazation
                 if vis is not None:
-                    vis.plot_many_stack({'Train Loss': total_loss},
+                    vis.plot_many_stack({'Rec Train Loss': total_loss},
                     win_name="Loss Curve")
                     f1_vis_dict = {}
                     p_vis_dict = {}
@@ -122,11 +123,11 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                     hit_vis_dict = {}
                     ndcg_vis_dict = {}
                     for i, performance in enumerate(performances):
-                        f1_vis_dict['Eval {} F1'.format(i)] = performance[0]
-                        p_vis_dict['Eval {} Precision'.format(i)] = performance[1]
-                        r_vis_dict['Eval {} Recall'.format(i)] = performance[2]
-                        hit_vis_dict['Eval {} Hit'.format(i)] = performance[3]
-                        ndcg_vis_dict['Eval {} NDCG'.format(i)] = performance[4]
+                        f1_vis_dict['Rec Eval {} F1'.format(i)] = performance[0]
+                        p_vis_dict['Rec Eval {} Precision'.format(i)] = performance[1]
+                        r_vis_dict['Rec Eval {} Recall'.format(i)] = performance[2]
+                        hit_vis_dict['Rec Eval {} Hit'.format(i)] = performance[3]
+                        ndcg_vis_dict['Rec Eval {} NDCG'.format(i)] = performance[4]
                     
                     if is_best:
                         log_str = ["Best performances in {} step!".format(trainer.best_step)]
@@ -138,15 +139,15 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                         
                         vis.log("\n".join(log_str), win_name="Best Performances")
 
-                    vis.plot_many_stack(f1_vis_dict, win_name="F1 Score@{}".format(FLAGS.topn))
+                    vis.plot_many_stack(f1_vis_dict, win_name="Rec F1 Score@{}".format(FLAGS.topn))
                     
-                    vis.plot_many_stack(p_vis_dict, win_name="Precision@{}".format(FLAGS.topn))
+                    vis.plot_many_stack(p_vis_dict, win_name="Rec Precision@{}".format(FLAGS.topn))
 
-                    vis.plot_many_stack(r_vis_dict, win_name="Recall@{}".format(FLAGS.topn))
+                    vis.plot_many_stack(r_vis_dict, win_name="Rec Recall@{}".format(FLAGS.topn))
 
-                    vis.plot_many_stack(hit_vis_dict, win_name="Hit Ratio@{}".format(FLAGS.topn))
+                    vis.plot_many_stack(hit_vis_dict, win_name="Rec Hit Ratio@{}".format(FLAGS.topn))
 
-                    vis.plot_many_stack(ndcg_vis_dict, win_name="NDCG@{}".format(FLAGS.topn))
+                    vis.plot_many_stack(ndcg_vis_dict, win_name="Rec NDCG@{}".format(FLAGS.topn))
 
             # set model in training mode
             pbar = tqdm(total=FLAGS.eval_interval_steps)
@@ -236,8 +237,7 @@ def run(only_forward=False):
     trainer = ModelTrainer(model, logger, epoch_length, FLAGS)
 
     if FLAGS.load_ckpt_file is not None:
-        ml1m_ckpt_path = os.path.join(FLAGS.log_path, 'tuned_ml1m')
-        trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, FLAGS.load_ckpt_file), model.state_dict(), cpu=not USE_CUDA)
+        trainer.loadEmbedding(os.path.join(FLAGS.log_path, FLAGS.load_ckpt_file), model.state_dict(), cpu=not USE_CUDA)
         model.is_pretrained = True
 
     # Do an evaluation-only run.

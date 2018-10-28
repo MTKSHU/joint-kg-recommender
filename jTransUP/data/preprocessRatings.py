@@ -5,6 +5,7 @@ import json
 import os
 import random
 import math
+import logging
 
 class Rating(object):
 	def __init__(self, user, item, rating):
@@ -180,3 +181,90 @@ def preprocess(rating_file, out_path, train_ratio=0.7, test_ratio=0.2, shuffle_d
         with open(valid_file, 'w', encoding='utf-8') as fout:
             for rating in valid_list:
                 fout.write('{}\t{}\t{}\n'.format(rating.u, rating.i, rating.r))
+
+def loadRatings(filename):
+    with open(filename, 'r', encoding='utf-8') as fin:
+        user_dict = {}
+        total_count = 0
+        for line in fin:
+            line_split = line.strip().split('\t')
+            if len(line_split) != 3 : continue
+            u = int(line_split[0])
+            i = int(line_split[1])
+            rating = int(line_split[2])
+
+            i_set = user_dict.get(u, set())
+            i_set.add( (i, rating) )
+            user_dict[u] = i_set
+            total_count += 1
+    return total_count, user_dict
+
+def getMaxMinRatings(user_dict):
+    max_ratings = 0
+    min_ratings = 10000
+    for u in user_dict:
+        if len(user_dict[u]) > max_ratings:
+            max_ratings = len(user_dict[u])
+        if len(user_dict[u]) < min_ratings:
+            min_ratings = len(user_dict[u])
+    return max_ratings, min_ratings
+
+def splitUsers(user_dict, split_num):
+    splited_users = [set() for _ in range(split_num)]
+    max_ratings, min_ratings = getMaxMinRatings(user_dict)
+    step = math.ceil((max_ratings - min_ratings + 1) / split_num)
+    splited_threshold = [i for i in range(min_ratings, max_ratings, step) if i!= min_ratings] + [max_ratings]
+    for u in user_dict:
+        rating_num = len(user_dict[u])
+        for i, thr in enumerate(splited_threshold):
+            if rating_num <= thr:
+                splited_users[i].add(u)
+                break
+    return splited_threshold, splited_users
+
+def output(filename, user_dict, u_ids):
+    count = 0
+    with open(filename, 'w', encoding='utf-8') as fout:
+        for u in user_dict:
+            if u in u_ids:
+                for ir in user_dict[u]:
+                    fout.write("{}\t{}\t{}\n".format(u, ir[0], ir[1]))
+                    count += 1
+    return count
+
+if __name__ == "__main__":
+    root_path = '/Users/caoyixin/Github/joint-kg-recommender/datasets/'
+    dataset = 'ml1m'
+    split_num = 10
+    train_file = root_path + dataset +'/train.dat'
+    test_file = root_path + dataset +'/test.dat'
+    log_file = root_path + dataset + '/data_preprocess.log'
+
+    logger = logging.getLogger()
+    logger.setLevel(level=logging.DEBUG)
+
+    # Formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # FileHandler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # StreamHandler
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
+    train_rating_total, train_user_dict = loadRatings(train_file)
+    test_rating_total, test_user_dict = loadRatings(test_file)
+
+    max_ratings, min_ratings = getMaxMinRatings(train_user_dict)
+    logger.info("load {} ratings for {} users, where min {} and max {} ratings!".format(train_rating_total, len(train_user_dict), min_ratings, max_ratings))
+    
+    splited_threshold, splited_users = splitUsers(train_user_dict, split_num)
+
+    for i, u_ids in enumerate(splited_users):
+        logger.info("generating test ratings if {} user ratings num < {} ...".format(len(u_ids), splited_threshold[i]))
+        filename = root_path + dataset +'/test{}.dat'.format(i)
+        count = output(filename, test_user_dict, u_ids)
+        logger.info("output {} ratings done!".format(count))

@@ -86,11 +86,13 @@ def evaluateRec(FLAGS, model, eval_iter, eval_dict, all_dicts, i_map, logger, ev
             gold_ids = list(pred_tuple[2])
             if FLAGS.model_type in ["transup", "jtransup", "cjtransup"]:
                 for d in all_dicts:
-                    gold_ids += d[u_id]
+                    gold_ids += list(d.get(u_id, set()))
+                gold_ids += list(eval_dict.get(u_id, set()))
+                
                 u_var = to_gpu(V(torch.LongTensor([u_id])))
                 i_var = to_gpu(V(torch.LongTensor(gold_ids)))
-                # item_num * relation_total
-                probs, _, _ = model.getPreferences(u_var, i_var, use_st_gumbel=FLAGS.use_st_gumbel)
+
+                probs, _, _ = model.reportPreference(u_var, i_var)
                 max_rel_index = torch.max(probs, 1)[1]
                 gold_strs = ",".join(["{}({})".format(ir[0], ir[1]) for ir in zip(gold_ids, max_rel_index.data.tolist())])
             else:
@@ -247,7 +249,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                 kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=False, is_report=is_report))
 
             if trainer.step > 0:
-                is_best = trainer.new_performance(kg_performances[0], kg_performances)
+                is_best = trainer.new_performance(rec_performances[0], rec_performances)
                 # visuliazation
                 if vis is not None:
                     vis.plot_many_stack({'Rec Train Loss': rec_total_loss, 'KG Train Loss':kg_total_loss},
@@ -372,7 +374,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             losses = losses + loss.normLoss(ent_embeddings) + loss.normLoss(rel_embeddings)
             losses = FLAGS.kg_lambda * losses
         # align loss if not share embeddings
-        if not FLAGS.share_embeddings and FLAGS.model_type not in ['cke']:
+        if not FLAGS.share_embeddings and FLAGS.model_type not in ['cke', 'cjtransup']:
             e_var = to_gpu(V(torch.LongTensor(e_ids)))
             i_var = to_gpu(V(torch.LongTensor(i_ids)))
             ent_embeddings = model.ent_embeddings(e_var)
@@ -462,17 +464,16 @@ def run(only_forward=False):
     
     trainer = ModelTrainer(joint_model, logger, epoch_length, FLAGS)
 
-    ml1m_ckpt_path = os.path.join(FLAGS.log_path, 'tuned_ml1m')
     if FLAGS.load_ckpt_file is not None and FLAGS.share_embeddings:
         load_ckpt_files = FLAGS.load_ckpt_file.split(':')
         for filename in load_ckpt_files:
-            trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, filename), joint_model.state_dict(), e_remap=e_map, i_remap=i_map)
-        model.is_pretrained = True
+            trainer.loadEmbedding(os.path.join(FLAGS.log_path, filename), joint_model.state_dict(), e_remap=e_map, i_remap=i_map)
+        joint_model.is_pretrained = True
     elif FLAGS.load_ckpt_file is not None:
         load_ckpt_files = FLAGS.load_ckpt_file.split(':')
         for filename in load_ckpt_files:
-            trainer.loadEmbedding(os.path.join(ml1m_ckpt_path, filename), joint_model.state_dict())
-        model.is_pretrained = True
+            trainer.loadEmbedding(os.path.join(FLAGS.log_path, filename), joint_model.state_dict())
+        joint_model.is_pretrained = True
     
     # Do an evaluation-only run.
     if only_forward:

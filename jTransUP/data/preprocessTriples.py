@@ -3,6 +3,7 @@ import json
 import os
 import random
 import math
+import logging
 
 class Triple(object):
 	def __init__(self, head, tail, relation):
@@ -281,3 +282,72 @@ def preprocess(triple_files, out_path, entity_file=None, relation_file=None, tra
         fout.write('one2many\t{}\n'.format('\t'.join([str(r) for r in one2manyRelations])))
         fout.write('many2one\t{}\n'.format('\t'.join([str(r) for r in many2oneRelations])))
         fout.write('many2many\t{}\n'.format('\t'.join([str(r) for r in many2manyRelations])))
+
+def loadRelationType(type_file):
+    with open(type_file, 'r', encoding='utf-8') as fin:
+        typed_relations = [set(), set(), set(), set()]
+        line_count = 0
+        for line in fin:
+            line_split = line.strip().split('\t')
+            if len(line_split) <= 1 : continue
+            for r in line_split[1:]:
+                typed_relations[line_count].add(int(r))
+            line_count += 1
+    return typed_relations
+
+def spliteTriples(test_file, relations, output_file):
+    with open(test_file, 'r', encoding='utf-8') as fin:
+        with open(output_file, 'w', encoding='utf-8') as fout:
+            count = 0
+            for line in fin:
+                line_split = line.strip().split('\t')
+                if len(line_split) != 3 : continue
+                h = int(line_split[0])
+                t = int(line_split[1])
+                r = int(line_split[2])
+                if r in relations:
+                    fout.write("{}\t{}\t{}\n".format(h,t,r))
+                    count += 1
+    return count
+
+if __name__ == "__main__":
+    root_path = '/Users/caoyixin/Github/joint-kg-recommender/datasets/'
+    dataset = 'dbbook2014'
+
+    relation_type_file = root_path + dataset +'/kg/relation_type.dat'
+
+    test_file = root_path + dataset +'/kg/test.dat'
+    log_file = root_path + dataset + '/data_preprocess.log'
+    one2one_file = root_path + dataset +'/kg/one2one.dat'
+    one2N_file = root_path + dataset +'/kg/one2N.dat'
+    N2one_file = root_path + dataset +'/kg/N2one.dat'
+    N2N_file = root_path + dataset +'/kg/N2N.dat'
+
+    logger = logging.getLogger()
+    logger.setLevel(level=logging.DEBUG)
+
+    # Formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # FileHandler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # StreamHandler
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
+    typed_relations = loadRelationType(relation_type_file)
+
+    one2one_count = spliteTriples(test_file, typed_relations[0], one2one_file)
+    logger.info("generate {} 1-to-1 triples of {} relations!".format(one2one_count, len(typed_relations[0])))
+
+    one2N_count = spliteTriples(test_file, typed_relations[1], one2N_file)
+    logger.info("generate {} 1-to-N triples of {} relations!".format(one2N_count, len(typed_relations[1])))
+
+    N2one_count = spliteTriples(test_file, typed_relations[2], N2one_file)
+    logger.info("generate {} N-to-1 triples of {} relations!".format(N2one_count, len(typed_relations[2])))
+
+    N2N_count = spliteTriples(test_file, typed_relations[3], N2N_file)
+    logger.info("generate {} N-to-N triples of {} relations!".format(N2N_count, len(typed_relations[3])))
