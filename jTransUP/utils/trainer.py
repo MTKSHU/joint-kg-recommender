@@ -49,9 +49,9 @@ class ModelTrainer(object):
         self.checkpoint_path = get_checkpoint_path(FLAGS)
 
         # Load checkpoint if available.
-        if FLAGS.eval_only_mode and os.path.isfile(self.checkpoint_path):
+        if FLAGS.eval_only_mode and os.path.isfile(FLAGS.load_experiment_name):
             self.logger.info("Found checkpoint, restoring.")
-            self.load(self.checkpoint_path)
+            self.load(FLAGS.load_experiment_name)
             self.logger.info(
                 "Resuming at step: {} with best dev performance: {} and test performance : {}.".format(
                     self.best_step, self.best_dev_performance, self.best_performances))

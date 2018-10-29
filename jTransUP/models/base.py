@@ -116,9 +116,6 @@ def flag_defaults(FLAGS):
 
     if not FLAGS.ckpt_path:
         FLAGS.ckpt_path = FLAGS.log_path
-
-    if FLAGS.eval_only_mode and not FLAGS.load_experiment_name:
-        FLAGS.load_experiment_name = FLAGS.experiment_name
     
     if FLAGS.seed != 0:
         torch.manual_seed(FLAGS.seed)
