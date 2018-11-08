@@ -108,7 +108,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                 all_eval_dicts = None
                 if FLAGS.filter_wrong_corrupted:
                     all_eval_dicts = [train_dict] + [tmp_data[3] for j, tmp_data in enumerate(eval_datasets) if j!=i]
-
+                    
                 performances.append( evaluate(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, is_report=is_report))
             
             if trainer.step > 0:

@@ -210,10 +210,13 @@ def getMaxMinRatings(user_dict):
     return max_ratings, min_ratings
 
 def splitUsers(user_dict, split_num):
+    split_num = 10
     splited_users = [set() for _ in range(split_num)]
     max_ratings, min_ratings = getMaxMinRatings(user_dict)
     step = math.ceil((max_ratings - min_ratings + 1) / split_num)
     splited_threshold = [i for i in range(min_ratings, max_ratings, step) if i!= min_ratings] + [max_ratings]
+    splited_threshold = [20, 40, 60, 80, 100, 150, 200, 300, 400, max_ratings]
+    
     for u in user_dict:
         rating_num = len(user_dict[u])
         for i, thr in enumerate(splited_threshold):

@@ -51,7 +51,7 @@ class ModelTrainer(object):
         # Load checkpoint if available.
         if FLAGS.eval_only_mode and os.path.isfile(FLAGS.load_experiment_name):
             self.logger.info("Found checkpoint, restoring.")
-            self.load(FLAGS.load_experiment_name)
+            self.load(FLAGS.load_experiment_name, cpu=not USE_CUDA)
             self.logger.info(
                 "Resuming at step: {} with best dev performance: {} and test performance : {}.".format(
                     self.best_step, self.best_dev_performance, self.best_performances))
@@ -168,6 +168,14 @@ class ModelTrainer(object):
             del (model_dict['ent_embeddings.weight'])
             self.model.ent_embeddings.weight.data[:len(loaded_embeddings), :] = loaded_embeddings[:, :]
             self.logger.info('Restored ' + str(len(loaded_embeddings)) + ' entities from checkpoint.')
+        
+        # for cfkg load
+        if 'rel_embeddings.weight' in old_model_state_dict and 'rel_embeddings.weight' in model_dict and len(old_model_state_dict['rel_embeddings.weight'])+1 == len(self.model.rel_embeddings.weight.data):
+
+            loaded_embeddings = old_model_state_dict['rel_embeddings.weight']
+            del (model_dict['rel_embeddings.weight'])
+            self.model.rel_embeddings.weight.data[:len(loaded_embeddings), :] = loaded_embeddings[:, :]
+            self.logger.info('Restored ' + str(len(loaded_embeddings)) + ' relations from checkpoint.')
         
         # restore entities
         if e_remap is not None and 'ent_embeddings.weight' in model_dict and 'ent_embeddings.weight' in embedding_names:
