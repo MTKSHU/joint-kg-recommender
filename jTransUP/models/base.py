@@ -11,7 +11,6 @@ import jTransUP.models.transUP as transup
 import jTransUP.models.bprmf as bprmf
 import jTransUP.models.transH as transh
 import jTransUP.models.jTransUP as jtransup
-import jTransUP.models.jTransUP_cke as cjtransup
 import jTransUP.models.fm as fm
 import jTransUP.models.transE as transe
 import jTransUP.models.transR as transr
@@ -23,7 +22,7 @@ import jTransUP.models.CFKG as cfkg
 def get_flags():
     gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm",
                                                 "transe", "transh", "transr", "transd",
-                                                "cfkg", "cke", "cofm", "jtransup", "cjtransup" ], "")
+                                                "cfkg", "cke", "cofm", "jtransup"], "")
     gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "including ratings.csv, r2kg.tsv and a kg dictionary containing kg_hop[0-9].dat")
     gflags.DEFINE_bool(
         "filter_wrong_corrupted",
@@ -36,7 +35,7 @@ def get_flags():
 
     gflags.DEFINE_float("learning_rate", 0.001, "Used in optimizer.")
     gflags.DEFINE_float("norm_lambda", 1.0, "decay of joint model.")
-    gflags.DEFINE_float("kg_lambda", 0.5, "decay of kg model.")
+    gflags.DEFINE_float("kg_lambda", 1.0, "decay of kg model.")
     gflags.DEFINE_integer(
         "early_stopping_steps_to_wait",
         70000,
@@ -160,8 +159,6 @@ def init_model(
         build_model = cfkg.build_model
     elif FLAGS.model_type == "jtransup":
         build_model = jtransup.build_model
-    elif FLAGS.model_type == "cjtransup":
-        build_model = cjtransup.build_model
     else:
         raise NotImplementedError
 

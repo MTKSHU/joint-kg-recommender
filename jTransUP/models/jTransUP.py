@@ -16,6 +16,8 @@ def build_model(FLAGS, user_total, item_total, entity_total, relation_total, i_m
                 item_total = item_total,
                 entity_total = entity_total,
                 relation_total = relation_total,
+                i_map=i_map,
+                new_map=new_map,
                 isShare = FLAGS.share_embeddings,
                 use_st_gumbel = FLAGS.use_st_gumbel
     )
@@ -28,6 +30,8 @@ class jTransUPModel(nn.Module):
                 item_total,
                 entity_total,
                 relation_total,
+                i_map,
+                new_map,
                 isShare,
                 use_st_gumbel
                 ):
@@ -38,71 +42,100 @@ class jTransUPModel(nn.Module):
         self.embedding_size = embedding_size
         self.user_total = user_total
         self.item_total = item_total
-        self.ent_total = entity_total
+        # padding when item are not aligned with any entity
+        self.ent_total = entity_total + 1
         self.rel_total = relation_total
         self.is_pretrained = False
+        # store item to item-entity dic
+        self.i_map = i_map
+        # store item-entity to (entity, item)
+        self.new_map = new_map
+        # todo: simiplifying the init
         # transup
         user_weight = torch.FloatTensor(self.user_total, self.embedding_size)
+        item_weight = torch.FloatTensor(self.item_total, self.embedding_size)
+        pref_weight = torch.FloatTensor(self.rel_total, self.embedding_size)
+        pref_norm_weight = torch.FloatTensor(self.rel_total, self.embedding_size)
         nn.init.xavier_uniform(user_weight)
+        nn.init.xavier_uniform(item_weight)
+        nn.init.xavier_uniform(pref_weight)
+        nn.init.xavier_uniform(pref_norm_weight)
+        # init user and item embeddings
         self.user_embeddings = nn.Embedding(self.user_total, self.embedding_size)
+        self.item_embeddings = nn.Embedding(self.item_total, self.embedding_size)
         self.user_embeddings.weight = nn.Parameter(user_weight)
+        self.item_embeddings.weight = nn.Parameter(item_weight)
         normalize_user_emb = F.normalize(self.user_embeddings.weight.data, p=2, dim=1)
+        normalize_item_emb = F.normalize(self.item_embeddings.weight.data, p=2, dim=1)
         self.user_embeddings.weight.data = normalize_user_emb
+        self.item_embeddings.weight.data = normalize_item_emb
+        # init preference parameters
+        self.pref_embeddings = nn.Embedding(self.rel_total, self.embedding_size)
+        self.pref_norm_embeddings = nn.Embedding(self.rel_total, self.embedding_size)
+        self.pref_embeddings.weight = nn.Parameter(pref_weight)
+        self.pref_norm_embeddings.weight = nn.Parameter(pref_norm_weight)
+        normalize_pref_emb = F.normalize(self.pref_embeddings.weight.data, p=2, dim=1)
+        normalize_pref_norm_emb = F.normalize(self.pref_norm_embeddings.weight.data, p=2, dim=1)
+        self.pref_embeddings.weight.data = normalize_pref_emb
+        self.pref_norm_embeddings.weight.data = normalize_pref_norm_emb
+
         self.user_embeddings = to_gpu(self.user_embeddings)
+        self.item_embeddings = to_gpu(self.item_embeddings)
+        self.pref_embeddings = to_gpu(self.pref_embeddings)
+        self.pref_norm_embeddings = to_gpu(self.pref_norm_embeddings)
 
         # transh
-        
+        ent_weight = torch.FloatTensor(self.ent_total-1, self.embedding_size)
         rel_weight = torch.FloatTensor(self.rel_total, self.embedding_size)
         norm_weight = torch.FloatTensor(self.rel_total, self.embedding_size)
+        nn.init.xavier_uniform(ent_weight)
         nn.init.xavier_uniform(rel_weight)
         nn.init.xavier_uniform(norm_weight)
+        norm_ent_weight = F.normalize(ent_weight, p=2, dim=1)
+        # init user and item embeddings
+        self.ent_embeddings = nn.Embedding(self.ent_total, self.embedding_size, padding_idx=self.ent_total-1)
         self.rel_embeddings = nn.Embedding(self.rel_total, self.embedding_size)
         self.norm_embeddings = nn.Embedding(self.rel_total, self.embedding_size)
+
+        self.ent_embeddings.weight = nn.Parameter(torch.cat([norm_ent_weight, torch.zeros(1, self.embedding_size)], dim=0))
         self.rel_embeddings.weight = nn.Parameter(rel_weight)
         self.norm_embeddings.weight = nn.Parameter(norm_weight)
+
         normalize_rel_emb = F.normalize(self.rel_embeddings.weight.data, p=2, dim=1)
         normalize_norm_emb = F.normalize(self.norm_embeddings.weight.data, p=2, dim=1)
+
         self.rel_embeddings.weight.data = normalize_rel_emb
         self.norm_embeddings.weight.data = normalize_norm_emb
+
+        self.ent_embeddings = to_gpu(self.ent_embeddings)
         self.rel_embeddings = to_gpu(self.rel_embeddings)
         self.norm_embeddings = to_gpu(self.norm_embeddings)
 
-        # is share embedding
-        ent_weight = torch.FloatTensor(self.ent_total, self.embedding_size)
-        nn.init.xavier_uniform(ent_weight)
-        self.ent_embeddings = nn.Embedding(self.ent_total, self.embedding_size)
-        self.ent_embeddings.weight = nn.Parameter(ent_weight)
-        normalize_ent_emb = F.normalize(self.ent_embeddings.weight.data, p=2, dim=1)
-        self.ent_embeddings.weight.data = normalize_ent_emb
-        self.ent_embeddings = to_gpu(self.ent_embeddings)
-
-        if self.is_share:
-            assert self.item_total == self.ent_total, "item numbers didn't match entities!"
-            self.item_embeddings = self.ent_embeddings
-        else:
-            item_weight = torch.FloatTensor(self.item_total, self.embedding_size)
-            nn.init.xavier_uniform(item_weight)
-            self.item_embeddings = nn.Embedding(self.item_total, self.embedding_size)
-            self.item_embeddings.weight = nn.Parameter(item_weight)
-            normalize_item_emb = F.normalize(self.item_embeddings.weight.data, p=2, dim=1)
-            self.item_embeddings.weight.data = normalize_item_emb
-            self.item_embeddings = to_gpu(self.item_embeddings)
-        
-        # to be consistent with transUP
-        self.pref_embeddings = self.rel_embeddings
-        self.pref_norm_embeddings = self.norm_embeddings
+    def paddingItems(self, i_ids, pad_index):
+        padded_e_ids = []
+        for i_id in i_ids:
+            new_index = self.i_map[i_id]
+            ent_id = self.new_map[new_index][0]
+            padded_e_ids.append(ent_id if ent_id != -1 else pad_index)
+        return padded_e_ids
 
     def forward(self, ratings, triples, is_rec=True):
         
         if is_rec and ratings is not None:
             u_ids, i_ids = ratings
+
+            e_ids = self.paddingItems(i_ids.data, self.ent_total-1)
+            e_var = to_gpu(V(torch.LongTensor(e_ids)))
+
             u_e = self.user_embeddings(u_ids)
             i_e = self.item_embeddings(i_ids)
+            e_e = self.ent_embeddings(e_var)
+            ie_e = i_e + e_e
 
-            _, r_e, norm = self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
+            _, r_e, norm = self.getPreferences(u_e, ie_e, use_st_gumbel=self.use_st_gumbel)
 
             proj_u_e = projection_transH_pytorch(u_e, norm)
-            proj_i_e = projection_transH_pytorch(i_e, norm)
+            proj_i_e = projection_transH_pytorch(ie_e, norm)
 
             if self.L1_flag:
                 score = torch.sum(torch.abs(proj_u_e + r_e - proj_i_e), 1)
@@ -138,11 +171,17 @@ class jTransUPModel(nn.Module):
         
         i_e = all_i.expand(batch_size, item_total, dim)
 
+        e_ids = self.paddingItems(all_i_ids.data if all_i_ids is not None else self.i_map, self.ent_total-1)
+        e_var = to_gpu(V(torch.LongTensor(e_ids)))
+        e_e = self.ent_embeddings(e_var).expand(batch_size, item_total, dim)
+        
+        ie_e = i_e + e_e
+
         # batch * item * dim
-        _, r_e, norm = self.getPreferences(u_e, i_e, use_st_gumbel=self.use_st_gumbel)
+        _, r_e, norm = self.getPreferences(u_e, ie_e, use_st_gumbel=self.use_st_gumbel)
 
         proj_u_e = projection_transH_pytorch(u_e, norm)
-        proj_i_e = projection_transH_pytorch(i_e, norm)
+        proj_i_e = projection_transH_pytorch(ie_e, norm)
 
         # batch * item
         if self.L1_flag:
@@ -211,12 +250,12 @@ class jTransUPModel(nn.Module):
     def getPreferences(self, u_e, i_e, use_st_gumbel=False):
         # use item and user embedding to compute preference distribution
         # pre_probs: batch * rel, or batch * item * rel
-        pre_probs = torch.matmul(u_e + i_e, torch.t(self.pref_embeddings.weight)) / 2
+        pre_probs = torch.matmul(u_e + i_e, torch.t(self.pref_embeddings.weight + self.rel_embeddings.weight)) / 2
         if use_st_gumbel:
             pre_probs = self.st_gumbel_softmax(pre_probs)
 
-        r_e = torch.matmul(pre_probs, self.pref_embeddings.weight)
-        norm = torch.matmul(pre_probs, self.pref_norm_embeddings.weight)
+        r_e = torch.matmul(pre_probs, self.pref_embeddings.weight + self.rel_embeddings.weight) / 2
+        norm = torch.matmul(pre_probs, self.pref_norm_embeddings.weight + self.norm_embeddings.weight) / 2
 
         return pre_probs, r_e, norm
     
@@ -274,6 +313,19 @@ class jTransUPModel(nn.Module):
             num_classes=y.size(len(y.shape)-1)).float()
         y = (y_hard - y).detach() + y
         return y
+    
+    def reportPreference(self, u_id, i_ids):
+        item_num = len(i_ids)
+        # item * dim
+        u_e = self.user_embeddings(u_id.expand(item_num))
+        i_e = self.item_embeddings(i_ids)
+
+        e_ids = self.paddingItems(i_ids.data, self.ent_total-1)
+        e_var = to_gpu(V(torch.LongTensor(e_ids)))
+        e_e = self.ent_embeddings(e_var)
+        ie_e = i_e + e_e
+
+        return self.getPreferences(u_e, ie_e, use_st_gumbel=self.use_st_gumbel)
 
     def disable_grad(self):
         for name, param in self.named_parameters():

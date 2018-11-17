@@ -25,6 +25,7 @@ from jTransUP.utils.data import getNegRatings
 FLAGS = gflags.FLAGS
 
 def evaluate(FLAGS, model, eval_iter, eval_dict, all_dicts, logger, eval_descending=True, is_report=False):
+
     # Evaluate
     total_batches = len(eval_iter)
     # processing bar
@@ -113,6 +114,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
             
             if trainer.step > 0:
                 is_best = trainer.new_performance(performances[0], performances)
+                
                 # visuliazation
                 if vis is not None:
                     vis.plot_many_stack({'Rec Train Loss': total_loss},

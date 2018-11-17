@@ -91,7 +91,6 @@ class ModelTrainer(object):
             self.best_step = self.step
             self.logger.info( "Checkpointing ..." )
             self.save(self.checkpoint_path)
-
             self.best_performances = performances
             self.best_dev_performance = performance_to_care
             is_best = True

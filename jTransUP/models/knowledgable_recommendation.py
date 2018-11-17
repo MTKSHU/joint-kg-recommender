@@ -84,7 +84,7 @@ def evaluateRec(FLAGS, model, eval_iter, eval_dict, all_dicts, i_map, logger, ev
             u_id = pred_tuple[0]
             top_ids = pred_tuple[1]
             gold_ids = list(pred_tuple[2])
-            if FLAGS.model_type in ["transup", "jtransup", "cjtransup"]:
+            if FLAGS.model_type in ["transup", "jtransup"]:
                 for d in all_dicts:
                     gold_ids += list(d.get(u_id, set()))
                 gold_ids += list(eval_dict.get(u_id, set()))
@@ -332,7 +332,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             # Calculate loss.
             losses = bprLoss(pos_score, neg_score, target=trainer.model_target)
             
-            if FLAGS.model_type in ["transup", "jtransup", "cjtransup"]:
+            if FLAGS.model_type in ["transup", "jtransup"]:
                 losses += orthogonalLoss(model.pref_embeddings.weight, model.pref_norm_embeddings.weight)
         # kg train
         else :
@@ -367,14 +367,14 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
             
             ent_embeddings = model.ent_embeddings(torch.cat([ph_var, pt_var, nh_var, nt_var]))
             rel_embeddings = model.rel_embeddings(torch.cat([pr_var, nr_var]))
-            if FLAGS.model_type in ["jtransup", "cjtransup"]:
+            if FLAGS.model_type in ["jtransup"]:
                 norm_embeddings = model.norm_embeddings(torch.cat([pr_var, nr_var]))
                 losses += loss.orthogonalLoss(rel_embeddings, norm_embeddings)
 
             losses = losses + loss.normLoss(ent_embeddings) + loss.normLoss(rel_embeddings)
             losses = FLAGS.kg_lambda * losses
         # align loss if not share embeddings
-        if not FLAGS.share_embeddings and FLAGS.model_type not in ['cke', 'cjtransup']:
+        if not FLAGS.share_embeddings and FLAGS.model_type not in ['cke', 'jtransup']:
             e_var = to_gpu(V(torch.LongTensor(e_ids)))
             i_var = to_gpu(V(torch.LongTensor(i_ids)))
             ent_embeddings = model.ent_embeddings(e_var)
