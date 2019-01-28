@@ -53,10 +53,10 @@ def drawMl1m():
     'CKE' : [10.76, 15.92, 19.32, 20.07, 19.63, 18.66, 16.71, 14.49, 11.67, 8.27],
     # 'CoFM_s' : [7.59, 11.96, 15.31, 16.09, 16.3, 15.88, 14.57, 12.67, 10.32, 7.88],
     'CoFM' : [7.46, 11.63, 15.36, 16.14, 16.22, 15.67, 14.64, 12.44, 10.4, 7.91],
-    'TransUP' : [11.66, 17.04, 20.26, 19.46, 19.56, 18.07, 15.61, 13.33, 10.9, 8.01],
+    'TUP' : [11.66, 17.04, 20.26, 19.46, 19.56, 18.07, 15.61, 13.33, 10.9, 8.01],
     # 'TransUP_s' : [11.16, 16.94, 20.7, 19.48, 19.12, 18.17, 15.54, 13.27, 10.75, 7.92],
     # 'jTransUP_h' : [10.14, 15.81, 18.63, 19.78, 20, 18.87, 17.76, 15.22, 12.06, 8.34],
-    'jTransUP' : [10.08, 15.78, 19.21, 20, 20.17, 19.65, 17.94, 15.18, 11.77, 8.34]
+    'KTUP' : [10.08, 15.78, 19.21, 20, 20.17, 19.65, 17.94, 15.18, 11.77, 8.34]
     })
 
     ax1 = m1_t['FM'].plot(secondary_y=True, color = '#8293ff', linestyle='--', marker='^')
@@ -66,19 +66,19 @@ def drawMl1m():
     m1_t['CKE'].plot(secondary_y=True, color = '#b83b5e', linestyle='-', marker='x')
     # m1_t['cofm_s'].plot(secondary_y=True, color = '#cce490', linestyle='-', marker='s')
     m1_t['CoFM'].plot(secondary_y=True, color = '#6a2c70', linestyle='-', marker='+')
-    m1_t['TransUP'].plot(secondary_y=True, color = '#48466d', linestyle='--', marker='o')
+    m1_t['TUP'].plot(secondary_y=True, color = '#48466d', linestyle='--', marker='o')
     # m1_t['TransUP_s'].plot(secondary_y=True, color = '#48466d', linestyle='--', marker='o')
 
     # m1_t['jtransup_h'].plot(secondary_y=True, color = '#393e46', linestyle='-', marker='s')
-    m1_t['jTransUP'].plot(secondary_y=True, color = '#222831', linestyle='-', marker='s')
+    m1_t['KTUP'].plot(secondary_y=True, color = '#222831', linestyle='-', marker='s')
     ax = m1_t['Ratings'].plot(kind='bar', width = width, color = '#abedd8')
     
-    ax.set_xlabel('# Users')
+    ax.set_xlabel('User Group')
     ax.set_ylabel('# Avg. Ratings', color='#45b7b7')
     ax1.set_ylabel('F1 score (%)')
 
     plt.xlim([-width, len(m1_t['Ratings'])-width])
-    ax.set_xticklabels(('684', '1364', '773', '585', '438', '750', '410', '517', '234', '285'), rotation = 45)
+    # ax.set_xticklabels(('684', '1364', '773', '585', '438', '750', '410', '517', '234', '285'), rotation = 45)
     plt.legend()
     plt.show()
 

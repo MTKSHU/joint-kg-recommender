@@ -119,7 +119,7 @@ def flag_defaults(FLAGS):
     if FLAGS.seed != 0:
         torch.manual_seed(FLAGS.seed)
 
-    if FLAGS.model_type in ['cke', 'cjtransup']:
+    if FLAGS.model_type in ['cke', 'jtransup']:
         FLAGS.share_embeddings = False
     elif FLAGS.model_type == 'cfkg':
         FLAGS.share_embeddings = True
