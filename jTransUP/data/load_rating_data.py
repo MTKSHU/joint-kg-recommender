@@ -9,7 +9,7 @@ def loadVocab(filename):
             line_split = line.strip().split('\t')
             if len(line_split) != 2 : continue
             mapped_id = int(line_split[0])
-            org_id = int(line_split[1])
+            org_id = line_split[1]
             vocab[org_id] = mapped_id
 
     return vocab

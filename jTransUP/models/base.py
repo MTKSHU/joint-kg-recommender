@@ -23,7 +23,7 @@ def get_flags():
     gflags.DEFINE_enum("model_type", "transup", ["transup", "bprmf", "fm",
                                                 "transe", "transh", "transr", "transd",
                                                 "cfkg", "cke", "cofm", "jtransup"], "")
-    gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014"], "including ratings.csv, r2kg.tsv and a kg dictionary containing kg_hop[0-9].dat")
+    gflags.DEFINE_enum("dataset", "ml1m", ["ml1m", "dbbook2014", "amazon-book", "last-fm", "yelp2018"], "including ratings.csv, r2kg.tsv and a kg dictionary containing kg_hop[0-9].dat")
     gflags.DEFINE_bool(
         "filter_wrong_corrupted",
         True,

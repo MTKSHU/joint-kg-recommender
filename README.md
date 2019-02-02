@@ -46,7 +46,7 @@ For item recommendation, the folder should contain the following files: **train.
 
 For KG representation, the files should under the path: '/PATH_TO_DATASET_FOLDER/DATASET_NAME/kg/'. The required files contain: **train.dat**, **e_map.dat** and **r_map.dat**. Similarly, each line in train.dat is a triple: 'head_entity_id tail_entity_id relation_id' separated by '\t', e_map and r_map specify the mapped entity_id to original entity. The evaluation files would be specified by flag '-kg_test_files', where multiple eval files separated by ':'. Note that the first eval file is used for validation.
 
-The joint model requires all of the above files and **i2kg_map.tsv**, where each line of it denotes the original item id to the original entity.
+The joint model requires all of the above files and **i2kg_map.tsv**, where each line consist of original item id, entity title, and original entity uri separated by tab.
 
 For example, we run our KTUP by:
 
@@ -90,4 +90,4 @@ We can also specify the general parameters by setting flags like optimizer or le
 
 ### Visualization
 
-We use the package of visdom for visualization. If you decide to visualize the training and evaluation curve, the visdom environment is required and set '-has_visualization', and even the port '-visualization_port 8097'. Then, one can moniter the training and evaluation curves using the brower by entering : "http://host_ip:8097".
+We use the package of visdom for visualization. If you decide to visualize the training and evaluation curve, the visdom environment is required (python -m visdom.server) and set '-has_visualization', and even the port '-visualization_port 8097'. Then, one can moniter the training and evaluation curves using the brower by entering : "http://host_ip:8097".

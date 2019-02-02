@@ -249,7 +249,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                 kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=False, is_report=is_report))
 
             if trainer.step > 0:
-                is_best = trainer.new_performance(kg_performances[0], kg_performances)
+                is_best = trainer.new_performance(rec_performances[0], rec_performances)
                 # visuliazation
                 if vis is not None:
                     vis.plot_many_stack({'Rec Train Loss': rec_total_loss, 'KG Train Loss':kg_total_loss},
