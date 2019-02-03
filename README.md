@@ -91,3 +91,14 @@ We can also specify the general parameters by setting flags like optimizer or le
 ### Visualization
 
 We use the package of visdom for visualization. If you decide to visualize the training and evaluation curve, the visdom environment is required (python -m visdom.server) and set '-has_visualization', and even the port '-visualization_port 8097'. Then, one can moniter the training and evaluation curves using the brower by entering : "http://host_ip:8097".
+
+## Reference
+If you use our code, please cite our paper:
+```
+@inproceedings{cao2018unifying,
+  title={Unifying Knowledge Graph Learning and Recommendation: Towards a Better Understanding of User Preference},
+  author={Cao, Yixin and Wang, Xiang and He, Xiangnan and Hu, Zikun and Chua Tat-seng},
+  booktitle={WWW},
+  year={2019}
+}
+```

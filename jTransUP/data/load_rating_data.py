@@ -2,6 +2,7 @@ import os
 import numpy as np
 from jTransUP.utils.data import MakeTrainIterator, MakeEvalIterator
 
+# org--> id
 def loadVocab(filename):
     with open(filename, 'r', encoding='utf-8') as fin:
         vocab = {}

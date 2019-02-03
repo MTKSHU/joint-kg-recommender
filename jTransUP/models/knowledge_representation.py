@@ -129,7 +129,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                        ' steps. Stopping training.')
             if pbar is not None: pbar.close()
             break
-        if trainer.step % FLAGS.eval_interval_steps == 0:
+        if trainer.step % FLAGS.eval_interval_steps == 0 :
             if pbar is not None:
                 pbar.close()
             total_loss /= FLAGS.eval_interval_steps
@@ -145,7 +145,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
 
                 performances.append( evaluate(FLAGS, model, entity_total, relation_total, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, logger, eval_descending=False, is_report=is_report))
 
-            if trainer.step > 0:
+            if trainer.step > 0 and len(performances) > 0 :
                 is_best = trainer.new_performance(performances[0], performances)
                 # visuliazation
                 if vis is not None:
@@ -216,6 +216,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
         trainer.optimizer_step()
         total_loss += losses.data[0]
         pbar.update(1)
+    trainer.save(trainer.checkpoint_path + '_final')
 
 def run(only_forward=False):
     if FLAGS.seed != 0:
@@ -250,12 +251,14 @@ def run(only_forward=False):
 
     # load data
     kg_path = os.path.join(os.path.join(FLAGS.data_path, FLAGS.dataset), 'kg')
-    eval_files = FLAGS.kg_test_files.split(':')
+    eval_files = []
+    if FLAGS.kg_test_files:
+        eval_files = FLAGS.kg_test_files.split(':')
 
     train_dataset, eval_datasets, e_map, r_map = load_data(kg_path, eval_files, FLAGS.batch_size, logger=logger, negtive_samples=FLAGS.negtive_samples)
 
-    entity_total = len(e_map)
-    relation_total = len(r_map)
+    entity_total = max(len(e_map), max(e_map.values()))
+    relation_total = max(len(r_map), max(r_map.values()))
     
     train_iter, train_total, train_list, train_head_dict, train_tail_dict = train_dataset
 

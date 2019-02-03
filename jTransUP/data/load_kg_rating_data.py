@@ -9,7 +9,7 @@ def loadR2KgMap(filename):
         for line in fin:
             line_split = line.strip().split('\t')
             if len(line_split) != 3 : continue
-            i_id = int(line_split[0])
+            i_id = line_split[0]
             kg_uri = line_split[2]
             i2kg_map[i_id] = kg_uri
             kg2i_map[kg_uri] = i_id
@@ -57,6 +57,7 @@ def load_data(data_path, rec_eval_files, kg_eval_files, batch_size, negtive_samp
     triple_train_dataset, triple_eval_datasets, e_map, r_map = load_triple_data.load_data(kg_path, kg_eval_files, batch_size, logger=logger, negtive_samples=negtive_samples)
 
     i2kg_map, kg2i_map = loadR2KgMap(map_file)
+    # e_map,imap org--> new id
     ikg_map, e_remap, i_remap, aligned_ie_total = rebuildEntityItemVocab(e_map, i_map, kg2i_map)
 
     if logger is not None:

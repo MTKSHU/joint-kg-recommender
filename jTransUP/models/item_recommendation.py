@@ -98,7 +98,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                        ' steps. Stopping training.')
             if pbar is not None: pbar.close()
             break
-        if trainer.step % FLAGS.eval_interval_steps == 0:
+        if trainer.step % FLAGS.eval_interval_steps == 0 :
             if pbar is not None:
                 pbar.close()
             total_loss /= FLAGS.eval_interval_steps
@@ -112,7 +112,7 @@ def train_loop(FLAGS, model, trainer, train_dataset, eval_datasets,
                     
                 performances.append( evaluate(FLAGS, model, eval_data[0], eval_data[3], all_eval_dicts, logger, eval_descending=True if trainer.model_target == 1 else False, is_report=is_report))
             
-            if trainer.step > 0:
+            if trainer.step > 0 and len(performances) > 0:
                 is_best = trainer.new_performance(performances[0], performances)
                 
                 # visuliazation
@@ -231,8 +231,8 @@ def run(only_forward=False):
 
     train_iter, train_total, train_list, train_dict = train_dataset
 
-    user_total = len(u_map)
-    item_total = len(i_map)
+    user_total = max(len(u_map), max(u_map.values()))
+    item_total = max(len(i_map), max(i_map.values()))
 
     model = init_model(FLAGS, user_total, item_total, 0, 0, logger)
     epoch_length = math.ceil( train_total / FLAGS.batch_size )

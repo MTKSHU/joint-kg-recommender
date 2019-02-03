@@ -29,6 +29,7 @@ def loadTriples(filename):
 
     return triple_total, triple_list, triple_head_dict, triple_tail_dict
 
+# org-->id
 def loadVocab(filename):
     with open(filename, 'r', encoding='utf-8') as fin:
         vocab = {}

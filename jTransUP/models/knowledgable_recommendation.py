@@ -29,6 +29,7 @@ def getMappedEntities(i_ids, i_remap, new_map):
     e_ids = []
     new_i_ids = []
     for i in set(i_ids):
+        if i not in i_remap : continue
         new_index = new_map[i_remap[i]]
         if new_index[0] == -1: continue
         e_ids.append(new_index[0])
@@ -39,6 +40,7 @@ def getMappedItems(e_ids, e_remap, new_map):
     i_ids = []
     new_e_ids = []
     for e in set(e_ids):
+        if e not in e_remap : continue
         new_index = new_map[e_remap[e]]
         if new_index[1] == -1: continue
         i_ids.append(new_index[1])
@@ -223,7 +225,7 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                        ' steps. Stopping training.')
             if pbar is not None: pbar.close()
             break
-        if trainer.step % FLAGS.eval_interval_steps == 0:
+        if trainer.step % FLAGS.eval_interval_steps == 0 and (len(rating_eval_datasets) > 0 or len(triple_eval_datasets)>0):
             if pbar is not None:
                 pbar.close()
             rec_total_loss /= (FLAGS.eval_interval_steps * FLAGS.joint_ratio)
@@ -248,12 +250,16 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
 
                 kg_performances.append( evaluateKG(FLAGS, model, eval_data[0], eval_data[1], eval_data[4], eval_data[5], eval_head_dicts, eval_tail_dicts, e_map, logger, eval_descending=False, is_report=is_report))
 
-            if trainer.step > 0:
+            vis_rec = True if len(rec_performances) > 0 else False
+            vis_kg = True if len(kg_performances) > 0 else False
+            if trainer.step > 0 and vis_rec > 0:
                 is_best = trainer.new_performance(rec_performances[0], rec_performances)
                 # visuliazation
                 if vis is not None:
-                    vis.plot_many_stack({'Rec Train Loss': rec_total_loss, 'KG Train Loss':kg_total_loss},
-                    win_name="Loss Curve")
+                    if vis_rec and vis_kg:
+                        vis.plot_many_stack({'Rec Train Loss': rec_total_loss, 'KG Train Loss':kg_total_loss}, win_name="Loss Curve")
+                    else:
+                        vis.plot_many_stack({'Rec Train Loss': rec_total_loss}, win_name="Loss Curve")
 
                     f1_dict = {}
                     p_dict = {}
@@ -280,8 +286,10 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                         log_str += ["{} : {}.".format(s, "%.5f" % r_dict[s]) for s in r_dict]
                         log_str += ["{} : {}.".format(s, "%.5f" % rec_hit_dict[s]) for s in rec_hit_dict]
                         log_str += ["{} : {}.".format(s, "%.5f" % ndcg_dict[s]) for s in ndcg_dict]
-                        log_str += ["{} : {}.".format(s, "%.5f" % kg_hit_dict[s]) for s in kg_hit_dict]
-                        log_str += ["{} : {}.".format(s, "%.5f" % meanrank_dict[s]) for s in meanrank_dict]
+
+                        if vis_kg:
+                            log_str += ["{} : {}.".format(s, "%.5f" % kg_hit_dict[s]) for s in kg_hit_dict]
+                            log_str += ["{} : {}.".format(s, "%.5f" % meanrank_dict[s]) for s in meanrank_dict]
                         
                         vis.log("\n".join(log_str), win_name="Best Performances")
 
@@ -294,10 +302,10 @@ def train_loop(FLAGS, model, trainer, rating_train_dataset, triple_train_dataset
                     vis.plot_many_stack(rec_hit_dict, win_name="Rec Hit Ratio@{}".format(FLAGS.topn))
 
                     vis.plot_many_stack(ndcg_dict, win_name="Rec NDCG@{}".format(FLAGS.topn))
+                    if vis_kg:
+                        vis.plot_many_stack(kg_hit_dict, win_name="KG Hit Ratio@{}".format(FLAGS.topn))
 
-                    vis.plot_many_stack(kg_hit_dict, win_name="KG Hit Ratio@{}".format(FLAGS.topn))
-
-                    vis.plot_many_stack(meanrank_dict, win_name="KG MeanRank")
+                        vis.plot_many_stack(meanrank_dict, win_name="KG MeanRank")
 
             # set model in training mode
             pbar = tqdm(total=FLAGS.eval_interval_steps)
@@ -445,10 +453,10 @@ def run(only_forward=False):
 
     triple_train_iter, triple_train_total, triple_train_list, triple_train_head_dict, triple_train_tail_dict = triple_train_dataset
 
-    user_total = len(u_map)
-    item_total = len(i_map)
-    entity_total = len(e_map)
-    relation_total = len(r_map)
+    user_total = max(len(u_map), max(u_map.values()))
+    item_total = max(len(i_map), max(i_map.keys()))
+    entity_total = max(len(e_map), max(e_map.keys()))
+    relation_total = max(len(r_map), max(r_map.values()))
 
     if FLAGS.share_embeddings:
         item_entity_total = len(ikg_map)
